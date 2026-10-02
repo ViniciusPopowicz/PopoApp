@@ -1,0 +1,8 @@
+{
+  "/(authenticated)/financeiro/page": "app/(authenticated)/financeiro/page.js",
+  "/(authenticated)/clientes/page": "app/(authenticated)/clientes/page.js",
+  "/(authenticated)/produtos/page": "app/(authenticated)/produtos/page.js",
+  "/(authenticated)/page": "app/(authenticated)/page.js",
+  "/(authenticated)/agenda/page": "app/(authenticated)/agenda/page.js",
+  "/(authenticated)/lembretes/page": "app/(authenticated)/lembretes/page.js"
+}
