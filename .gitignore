@@ -13,6 +13,9 @@ npm-debug.log*
 # Build folders
 dist/
 build/
+.next/
+out/
+storage/
 
 # Coverage
 coverage/

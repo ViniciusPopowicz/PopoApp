@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  
-  // Allow public routes
+
+  // Allow public routes and assets
   if (
     pathname.startsWith('/login') ||
     pathname.startsWith('/api/auth') ||
@@ -13,10 +13,17 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check session cookie (simple check, full verification in server routes)
+  // Check session cookie
   const sessionCookie = request.cookies.get('popoapp-session');
-  
+
   if (!sessionCookie) {
+    // API routes must return 401 JSON instead of redirecting (AC 60)
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        { success: false, error: 'Não autorizado' },
+        { status: 401 }
+      );
+    }
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
