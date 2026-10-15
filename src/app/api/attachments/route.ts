@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
+import { requireAuth } from '@/lib/session';
 import { attachmentService } from '@/services/attachment.service';
 import { DomainError } from '@/lib/errors';
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session || !session.isLoggedIn || !session.userId) {
-      return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
-    }
+    await requireAuth(request);
 
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
@@ -51,10 +48,7 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session || !session.isLoggedIn || !session.userId) {
-      return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
-    }
+    await requireAuth(request);
 
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get('clientId') || undefined;

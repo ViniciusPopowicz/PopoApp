@@ -18,8 +18,9 @@ Este guia descreve **todos os passos necessários** para configurar o projeto em
 8. [Configurar o Banco de Dados](#8--configurar-o-banco-de-dados)
 9. [Executar o Projeto](#9--executar-o-projeto)
 10. [Comandos Úteis](#10--comandos-úteis)
-11. [Solução de Problemas](#11--solução-de-problemas)
-12. [Stack Tecnológica](#12--stack-tecnológica)
+11. [Como Retomar o Desenvolvimento Rapidamente (Resume Protocol)](#11--como-retomar-o-desenvolvimento-rapidamente-resume-protocol)
+12. [Solução de Problemas](#12--solução-de-problemas)
+13. [Stack Tecnológica](#13--stack-tecnológica)
 
 ---
 
@@ -181,8 +182,8 @@ Copy-Item .env.example .env.local
 Abra os arquivos `.env` e `.env.local` em um editor de texto e preencha:
 
 ```env
-# Conexão com o SQL Server LocalDB (geralmente funciona sem alterações)
-DATABASE_URL="sqlserver://localhost;database=PopoApp;integratedSecurity=true;trustServerCertificate=true;instanceName=MSSQLLocalDB"
+# Conexão com o SQL Server LocalDB via proxy TCP local (porta 1433)
+DATABASE_URL="sqlserver://localhost:1433;database=PopoApp;integratedSecurity=true;trustServerCertificate=true;encrypt=DANGER_PLAINTEXT"
 
 # Chave secreta para encriptação das sessões (mínimo 32 caracteres)
 # Gere uma chave aleatória, por exemplo:
@@ -194,29 +195,39 @@ SESSION_SECRET="sua-chave-secreta-com-pelo-menos-32-caracteres"
 NODE_ENV="development"
 ```
 
-> **Importante:** Os arquivos `.env` e `.env.local` contêm dados sensíveis e **NÃO devem** ser commitados no Git (já estão no `.gitignore`).
+> **Importante:** Os arquivos `.env`, `.env.local` e `.env.test` contêm configurações de ambiente e **NÃO devem** ser commitados no Git (já estão no `.gitignore`).
+>
+> 💡 **Nota sobre LocalDB e Prisma:** O SQL Server LocalDB escuta exclusivamente em Named Pipes do Windows, enquanto o motor de consulta do Prisma (`tiberius`) conecta via TCP. O projeto inclui um proxy bridge leve (`tests/helpers/localdb-proxy.js`) executado via `npm run db:proxy`, que expõe o LocalDB na porta TCP 1433 para desenvolvimento e testes.
 
 ---
 
 ## 8. 🗃️ Configurar o Banco de Dados
 
-### 8.1 Verificar que o LocalDB está rodando
+### 8.1 Iniciar o LocalDB
 
 ```bash
 sqllocaldb start MSSQLLocalDB
 ```
 
-### 8.2 Gerar o Prisma Client
+### 8.2 Iniciar o Proxy TCP do LocalDB (Em segundo plano ou terminal separado)
+
+```bash
+npm run db:proxy
+```
+
+> Mantenha este terminal aberto durante o desenvolvimento/testes locais.
+
+### 8.3 Gerar o Prisma Client
 
 ```bash
 npx prisma generate
 ```
 
-### 8.3 Criar o banco de dados e aplicar o schema
+### 8.4 Aplicar as Migrations do Banco de Dados
 
 ```bash
-# Sincroniza o schema Prisma com o banco de dados (cria o banco e as tabelas)
-npx prisma db push
+# Aplica as migrações oficiais incluindo a constraint CK_Attachment_Ownership
+npx prisma migrate deploy
 ```
 
 ### 8.4 Popular o banco de dados com dados iniciais (seed)
@@ -273,21 +284,49 @@ npm start
 
 ## 10. 🛠️ Comandos Úteis
 
-| Comando                | Descrição                                        |
-| ---------------------- | ------------------------------------------------ |
-| `npm run dev`          | Inicia o servidor de desenvolvimento             |
-| `npm run build`        | Gera a build de produção                         |
-| `npm start`            | Inicia o servidor de produção                    |
-| `npm run lint`         | Verifica erros de linting (ESLint)               |
-| `npm run db:generate`  | Regenera o Prisma Client                         |
-| `npm run db:migrate`   | Aplica as migrations do Prisma                   |
-| `npm run db:seed`      | Popula o banco com dados iniciais                |
-| `npm run db:studio`    | Abre o Prisma Studio (interface visual do banco) |
-| `npx prisma db push`   | Sincroniza o schema com o banco de dados         |
+| Comando                | Descrição                                                    |
+| ---------------------- | ------------------------------------------------------------ |
+| `npm run dev`          | Inicia o servidor de desenvolvimento                         |
+| `npm run build`        | Gera a build de produção                                     |
+| `npm start`            | Inicia o servidor de produção                                |
+| `npm run lint`         | Verifica erros de linting (ESLint)                           |
+| `npm test`             | Executa os testes automatizados (Vitest) contra `PopoAppTest`|
+| `npm run db:proxy`     | Inicia o proxy TCP para o LocalDB (porta 1433, dev/testes)   |
+| `npm run db:generate`  | Regenera o Prisma Client                                     |
+| `npm run db:migrate`   | Aplica as migrations do Prisma (`prisma migrate deploy`)     |
+| `npm run db:seed`      | Popula o banco com dados iniciais                            |
+| `npm run db:studio`    | Abre o Prisma Studio (interface visual do banco)             |
 
 ---
 
-## 11. 🔧 Solução de Problemas
+## 11. 🔄 Como Retomar o Desenvolvimento Rapidamente (Resume Protocol)
+
+Para continuar o desenvolvimento de onde parou:
+
+1. **Garantir que o LocalDB está ativo**:
+   ```bash
+   sqllocaldb start MSSQLLocalDB
+   ```
+2. **Iniciar o proxy TCP em segundo plano**:
+   ```bash
+   npm run db:proxy
+   ```
+3. **Verificar os testes automatizados**:
+   ```bash
+   npm test
+   # Deve passar 100% dos testes (15 arquivos, 89 testes)
+   ```
+4. **Verificar o build e lint**:
+   ```bash
+   npm run lint
+   npm run build
+   ```
+5. **Consultar o plano atual**:
+   Abra `RESUME_GUIDE.md` e `IMPLEMENTATION_CHECKLIST.md` para ver as próximas tarefas (ex.: Telas de UI do Milestone 2 ou Serviços Clínicos do Milestone 3).
+
+---
+
+## 12. 🔧 Solução de Problemas
 
 ### ❌ Erro: `sqllocaldb` não é reconhecido como comando
 
@@ -341,7 +380,7 @@ Ou instale o Visual Studio Build Tools com o workload "Desenvolvimento para desk
 
 ---
 
-## 12. 📊 Stack Tecnológica
+## 13. 📊 Stack Tecnológica
 
 | Camada          | Tecnologia                                    |
 | --------------- | --------------------------------------------- |
@@ -358,6 +397,7 @@ Ou instale o Visual Studio Build Tools com o workload "Desenvolvimento para desk
 | **Ícones**      | Lucide React                                  |
 | **Notificações**| Sonner                                        |
 | **Datas**       | date-fns 4                                    |
+| **Testes**      | Vitest                                        |
 | **Idioma**      | Português (pt-BR)                             |
 
 ---
@@ -375,20 +415,25 @@ npm install
 # 3. Configure as variáveis de ambiente
 copy .env.example .env
 copy .env.example .env.local
-# Edite os arquivos e preencha SESSION_SECRET
+# Edite os arquivos e configure SESSION_SECRET
 
 # 4. Inicie o LocalDB
 sqllocaldb start MSSQLLocalDB
 
-# 5. Configure o banco de dados
-npx prisma generate
-npx prisma db push
+# 5. Inicie o proxy LocalDB (em segundo plano ou terminal separado)
+npm run db:proxy
+
+# 6. Aplique as migrations do Prisma
+npx prisma migrate deploy
 npm run db:seed
 
-# 6. Inicie o projeto
+# 7. Execute os testes automatizados
+npm test
+
+# 8. Inicie o projeto em desenvolvimento
 npm run dev
 
-# 7. Acesse http://localhost:3000
+# 9. Acesse http://localhost:3000
 # Login: admin / PopoApp2024!
 ```
 

@@ -3,7 +3,8 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import dotenv from 'dotenv';
 
-dotenv.config({ path: path.resolve(__dirname, '.env.test'), override: true });
+// D7: tests always load the isolated PopoAppTest configuration, overriding .env
+const testEnv = dotenv.config({ path: path.resolve(__dirname, '.env.test'), override: true }).parsed ?? {};
 
 export default defineConfig({
   plugins: [react()],
@@ -12,6 +13,17 @@ export default defineConfig({
     globals: true,
     fileParallelism: false,
     maxConcurrency: 1,
+    testTimeout: 30000,
+    hookTimeout: 60000,
+    env: {
+      ...testEnv,
+      NODE_ENV: 'test',
+    },
+    poolOptions: {
+      forks: {
+        singleFork: true,
+      },
+    },
   },
   resolve: {
     alias: {

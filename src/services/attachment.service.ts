@@ -15,6 +15,13 @@ export const ALLOWED_MIME_TYPES = [
 
 export type AllowedMimeType = typeof ALLOWED_MIME_TYPES[number];
 
+export const MIME_TO_EXTENSION: Record<AllowedMimeType, string> = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'application/pdf': '.pdf',
+};
+
 export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export const ALLOWED_CATEGORIES = [
@@ -111,7 +118,8 @@ export class AttachmentService {
 
     const storageDir = await this.ensureStorageDir();
     const fileId = crypto.randomUUID();
-    const ext = path.extname(input.originalName).toLowerCase() || '.bin';
+    // Extension derives from the validated MIME type, never from the client-supplied name
+    const ext = MIME_TO_EXTENSION[input.mimeType as AllowedMimeType];
     const storedFileName = `${fileId}${ext}`;
     const absoluteDiskPath = path.resolve(storageDir, storedFileName);
 

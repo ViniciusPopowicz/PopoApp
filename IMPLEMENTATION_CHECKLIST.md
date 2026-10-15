@@ -42,12 +42,45 @@
   - **Phase 11 (Authenticated File Storage - Backend)**: Implemented `src/services/attachment.service.ts` with local disk storage outside web root (`./storage/uploads`), UUID filenames, MIME allowlist (JPEG, PNG, WebP, PDF per V12), 10MB limit (V13), Client XOR Attendance exclusivity (V14, AC 61), and atomic profile photo replacement. Implemented `/api/attachments`, `/api/attachments/[id]` (secure streaming with 401 unauth check, `nosniff`, private cache), and `/api/clients/[id]/photo`.
   - **Testing**: 15 test files, 89 tests passing cleanly against live LocalDB database `PopoAppTest`.
 - **Remaining**:
-  - Complete UI screens for Phases 5, 8, 11 (Client detail/list, procedure catalog UI, attachment uploader).
+  - UI screens for Milestone 2:
+    - Client UI (`/clientes` list, registration dialog, `/clientes/[id]` clinical detail page with tabbed history)
+    - Procedure Catalog UI (`/procedimentos` catalog, pricing modal, category filters)
+    - Attachment UI (gallery component, document uploader, photo upload modal)
   - Milestone 3: Scheduling, Clinical Encounter & Product Traceability (Phases 6, 7, 9, 10).
 - **Immediate Next Action**:
-  - Build UI screens for Client, Procedure, and Attachment workspaces (or proceed with Milestone 3 service layer).
+  - Build UI screens for Client, Procedure, and Attachment workspaces (or proceed with Milestone 3 Appointments & Attendances domain services).
 - **Blockers**: None.
 - **Pending Decisions**: None (Binding decisions D1–D7 established).
+
+### Resume Protocol (Quick Start for Returning Agent)
+
+> 📘 **Full Resumption Guide**: See [`RESUME_GUIDE.md`](./RESUME_GUIDE.md) for complete context, step-by-step procedures, architectural constraints, and file index.
+
+When resuming development, execute these steps in order:
+
+1. **Verify Environment & LocalDB**:
+   ```powershell
+   sqllocaldb start MSSQLLocalDB
+   ```
+2. **Start LocalDB TCP Proxy (dev/test bridge)**:
+   ```powershell
+   # If port 1433 is not already listening:
+   npm run db:proxy
+   ```
+3. **Verify Baseline Tests**:
+   ```powershell
+   npm test
+   # Expected: 15 test files passed, 89 passed (0 failures)
+   ```
+4. **Verify Build & Lint**:
+   ```powershell
+   npm run lint
+   npm run build
+   # Expected: zero lint errors, 17/17 pages generated cleanly
+   ```
+5. **Resume Implementation Priority**:
+   - Option A (Milestone 2 UI): Implement real UI screens for Client Management (`/clientes` & `/clientes/[id]`), Procedure Catalog (`/procedimentos`), and Attachment gallery, replacing mock imports in those views.
+   - Option B (Milestone 3 Core Services): Implement `AppointmentService` (6 statuses, rescheduling cascade, cancel reasons) and `AttendanceService` (D1 state machine, procedure pricing, discount application).
 
 ---
 

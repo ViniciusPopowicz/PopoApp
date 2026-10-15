@@ -1,7 +1,8 @@
 import prismaTest from './db-client';
 import { generateValidCpf } from './cpf-validator';
 
-let fixtureCounter = 1;
+// Random seed avoids CPF/serial collisions if a previous run left rows behind
+let fixtureCounter = Math.floor(Math.random() * 1_000_000) + 1;
 
 export function getNextCounter(): number {
   return fixtureCounter++;

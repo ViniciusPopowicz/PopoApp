@@ -1,49 +1,34 @@
-# Dispatch: Reviewer M2 2 (Security, Core Entities & Catalog)
+## 2026-10-07T02:10:30Z
+You are reviewer_m2_2.
+Your working directory is:
+c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\reviewer_m2_2
 
-You are a reviewer agent (`teamwork_preview_reviewer`).
-Working Directory: c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\reviewer_m2_2
-Project Root: c:\Users\Vinicius\PopoApp\PopoApp
-Parent Orchestrator Working Directory: c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\orchestrator_1
+Project Root:
+c:\Users\Vinicius\PopoApp\PopoApp
 
-Authoritative Sources:
-- c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\ORIGINAL_REQUEST.md
-- c:\Users\Vinicius\PopoApp\PopoApp\POPOAPP_DEVELOPMENT_SPEC.md (§3, §4, §5, §6, §9, §32)
-- c:\Users\Vinicius\PopoApp\PopoApp\PROJECT.md
-- c:\Users\Vinicius\PopoApp\PopoApp\IMPLEMENTATION_CHECKLIST.md
-- c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\worker_m2_1\handoff.md
-
-Review Objectives:
-1. Verify contract adherence for API endpoints:
-   - `/api/clients` and `/api/clients/[id]`: validation errors return 400, unique CPF conflict returns 409, not found returns 404.
-   - `/api/procedures` and `/api/procedures/[id]`: validation errors return 400, conflict returns 409.
-   - `/api/attachments` and `/api/attachments/[id]`: unauthenticated returns 401 JSON.
-2. Verify checklist accuracy: Check that `IMPLEMENTATION_CHECKLIST.md` accurately tracks Phases 3, 4, 5, 11 with valid checklist markers (`[x]`).
-3. Verify Brazilian Portuguese error messages and responses across all touched endpoints.
-4. Run build and type check: `npx tsc --noEmit`.
-
-Render Verdict:
-- Record your verdict: APPROVE or REQUEST_CHANGES in `c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\reviewer_m2_2\handoff.md`.
-- Notify parent via `send_message`.
-
-
-## 2026-10-06T03:58:48Z
-You are Milestone 2 Reviewer 2.
-Your working directory is: c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\reviewer_m2_2
-Read c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\reviewer_m2_2\DISPATCH.md first.
-
-Authoritative source files to review:
-- c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\ORIGINAL_REQUEST.md
+Read these files first:
+- c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\ORIGINAL_REQUEST.md (MANDATORY: read completely)
 - c:\Users\Vinicius\PopoApp\PopoApp\POPOAPP_DEVELOPMENT_SPEC.md
-- c:\Users\Vinicius\PopoApp\PopoApp\PROJECT.md
+- c:\Users\Vinicius\PopoApp\PopoApp\POPOAPP_IMPLEMENTATION_CHECKLIST_SPEC.md
 - c:\Users\Vinicius\PopoApp\PopoApp\IMPLEMENTATION_CHECKLIST.md
-- c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\worker_m2_1\handoff.md
+- c:\Users\Vinicius\PopoApp\PopoApp\PROJECT.md
+- c:\Users\Vinicius\PopoApp\PopoApp\TEST_INFRA.md
 
-Review the implementation of Milestone 2:
-- Contract adherence for API endpoints (/api/clients, /api/procedures, /api/attachments)
-- Check that IMPLEMENTATION_CHECKLIST.md accurately tracks Phases 3, 4, 5, 8, 11 with valid checklist markers
-- Verify Brazilian Portuguese error messages and responses across all touched endpoints
-- Verify error handling (400 validation, 401 unauth, 404 not found, 409 conflict for duplicate CPF)
+Scope: Review Milestone 2 (Security, Core Entities & Catalog — Phases 3, 4, 5, 11).
+Files under review:
+- `src/services/auth.service.ts`, `src/app/api/auth/*`
+- `src/services/client.service.ts`, `src/lib/cpf.ts`, `src/schemas/client.ts`, `src/app/api/clients/*`
+- `src/services/procedure.service.ts`, `src/types/procedure.ts`, `src/schemas/procedure.ts`, `src/app/api/procedures/*`
+- `src/services/attachment.service.ts`, `src/app/api/attachments/*`, `src/app/api/clients/[id]/photo/route.ts`
+- Related tests under `tests/tier1_features/` and `tests/tier2_boundaries/`
 
-Render Verdict:
-- Record your verdict: APPROVE or REQUEST_CHANGES in handoff.md in your working directory.
-- Notify parent via send_message.
+Review Checklist:
+1. Examine code correctness, TypeScript types, error handling, and security.
+2. Verify CPF validation (MOD 11, repeated digits, uniqueness handling).
+3. Verify Procedure validations (positive standard value, mandatory fields, soft deactivation).
+4. Verify Attachment storage (storage outside public web root, MIME allowlist, 10MB limit, Client XOR Attendance exclusivity constraint).
+5. Verify Route protection and 401 unauthenticated handling (AC 60).
+6. Run `npm test` and `npm run lint` and verify 0 failures.
+
+Write your full review in `c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\reviewer_m2_2\handoff.md` with explicit Verdict: APPROVE or REQUEST_CHANGES.
+Send a message to orchestrator with your verdict and findings when complete.

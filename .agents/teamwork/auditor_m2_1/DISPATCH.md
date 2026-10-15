@@ -1,57 +1,34 @@
-# Dispatch: Forensic Auditor M2 (Security, Core Entities & Catalog)
+## 2026-10-07T02:10:30Z
+You are auditor_m2_1.
+Your working directory is:
+c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\auditor_m2_1
 
-You are a forensic integrity auditor (`teamwork_preview_auditor`).
-Working Directory: c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\auditor_m2_1
-Project Root: c:\Users\Vinicius\PopoApp\PopoApp
-Parent Orchestrator Working Directory: c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\orchestrator_1
+Project Root:
+c:\Users\Vinicius\PopoApp\PopoApp
 
-Authoritative Sources:
-- c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\ORIGINAL_REQUEST.md
-- c:\Users\Vinicius\PopoApp\PopoApp\POPOAPP_DEVELOPMENT_SPEC.md (§3, §4, §5, §6, §9, §32)
-- c:\Users\Vinicius\PopoApp\PopoApp\PROJECT.md
-- c:\Users\Vinicius\PopoApp\PopoApp\IMPLEMENTATION_CHECKLIST.md
-- c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\worker_m2_1\handoff.md
-
-Forensic Audit Objectives:
-1. CHEATING DETECTION & GENUINE IMPLEMENTATION:
-   - Check `src/lib/cpf.ts`: Ensure CPF validation is genuine mathematical MOD 11 algorithm with weights 10..2 and 11..2, not a hardcoded list of valid/invalid CPFs.
-   - Check `src/services/auth.service.ts`: Ensure authentication actually calls Prisma `findUnique` and `bcrypt.compare`, and does not return hardcoded user objects or bypass password verification.
-   - Check `src/services/client.service.ts`: Ensure client persistence interacts directly with Prisma Client, handles unique CPF constraint, validates mandatory fields, and handles emergency contacts genuinely.
-   - Check `src/services/procedure.service.ts`: Ensure genuine Prisma interaction, positive price checks, and duration validation.
-   - Check `src/services/attachment.service.ts`: Ensure genuine disk writing (`fs/promises` or streaming) to `./storage/uploads/`, real MIME type verification, real file size enforcement (10MB), and genuine XOR ownership verification.
-   - Check `src/middleware.ts`: Ensure unauthenticated `/api/*` requests receive genuine JSON 401 HTTP responses (AC 60).
-2. Codebase Hygiene: Ensure no mock files, facade stubs, or test circumventions were introduced in production `src/` code.
-3. Checklist Integrity: Ensure `IMPLEMENTATION_CHECKLIST.md` updates genuinely reflect implemented functionality.
-
-Render Verdict:
-- Your verdict MUST be either **CLEAN** or **INTEGRITY VIOLATION**.
-- Record your verdict and full evidence chain in `c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\auditor_m2_1\handoff.md`.
-- Notify parent via `send_message`.
-
-## 2026-10-06T03:58:48Z
-You are Forensic Auditor M2.
-Your working directory is: c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\auditor_m2_1
-Read c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\auditor_m2_1\DISPATCH.md first.
-
-Authoritative sources:
-- c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\ORIGINAL_REQUEST.md
+Read these files first:
+- c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\ORIGINAL_REQUEST.md (MANDATORY: read completely)
 - c:\Users\Vinicius\PopoApp\PopoApp\POPOAPP_DEVELOPMENT_SPEC.md
-- c:\Users\Vinicius\PopoApp\PopoApp\PROJECT.md
+- c:\Users\Vinicius\PopoApp\PopoApp\POPOAPP_IMPLEMENTATION_CHECKLIST_SPEC.md
 - c:\Users\Vinicius\PopoApp\PopoApp\IMPLEMENTATION_CHECKLIST.md
-- c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\worker_m2_1\handoff.md
+- c:\Users\Vinicius\PopoApp\PopoApp\PROJECT.md
+- c:\Users\Vinicius\PopoApp\PopoApp\TEST_INFRA.md
 
-Perform forensic integrity audit on Milestone 2:
-1. CHEATING DETECTION & GENUINE IMPLEMENTATION:
-   - Check src/lib/cpf.ts: Ensure CPF validation is genuine mathematical MOD 11 algorithm with weights 10..2 and 11..2, not a hardcoded list of valid/invalid CPFs.
-   - Check src/services/auth.service.ts: Ensure authentication actually queries Prisma User and calls bcrypt.compare, and does not return hardcoded user objects or bypass password verification.
-   - Check src/services/client.service.ts: Ensure client persistence interacts directly with Prisma Client, handles unique CPF constraint, validates mandatory fields, and handles emergency contacts genuinely.
-   - Check src/services/procedure.service.ts: Ensure genuine Prisma interaction, positive price checks, and duration validation.
-   - Check src/services/attachment.service.ts: Ensure genuine disk writing to ./storage/uploads/, real MIME type verification, real file size enforcement (10MB), and genuine XOR ownership verification.
-   - Check src/middleware.ts: Ensure unauthenticated /api/* requests receive genuine JSON 401 HTTP responses (AC 60).
-2. Codebase Hygiene: Ensure no mock files, facade stubs, or test circumventions were introduced in production src/ code.
-3. Checklist Integrity: Ensure IMPLEMENTATION_CHECKLIST.md updates genuinely reflect implemented functionality.
+Scope: Forensic Integrity Audit of Milestone 2 (Auth, Client, Procedure, Attachment).
+Your checks MUST cover:
+1. Static analysis of `src/services/` (`auth.service.ts`, `client.service.ts`, `procedure.service.ts`, `attachment.service.ts`) and `src/app/api/`:
+   - Are there any mock imports (e.g. from `src/data/mock`)?
+   - Are there any hardcoded values, dummy facades, fake return statements?
+   - Is password hashing using authentic bcrypt?
+   - Is CPF validation using authentic MOD 11 algorithm?
+   - Is file storage writing genuine files to disk outside public web root (`./storage/uploads`), using UUIDs?
+   - Is `CK_Attachment_Ownership` CHECK constraint present in the database migration and SQL Server schema?
+2. Execution validation:
+   - Run `npm test` and verify tests execute authentic code and assert genuine database states.
+   - Verify that test assertions are not trivialized (e.g. `expect(true).toBe(true)`).
+3. Final Verdict:
+   - If any cheating, facades, hardcoding, or bypassed constraints are found: report INTEGRITY VIOLATION with exhaustive evidence.
+   - If implementation is completely authentic, genuine, and compliant: report CLEAN.
 
-Render Verdict:
-- Your verdict MUST be either CLEAN or INTEGRITY VIOLATION.
-- Record your verdict and full evidence chain in c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\auditor_m2_1\handoff.md.
-- Notify parent via send_message.
+Write your full forensic audit report in `c:\Users\Vinicius\PopoApp\PopoApp\.agents\teamwork\auditor_m2_1\handoff.md`.
+Send a message to orchestrator with your verdict and findings when complete.

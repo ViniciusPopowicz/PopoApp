@@ -1,8 +1,10 @@
 import prismaTest from './db-client';
 
 /**
- * Truncates or deletes all test records from PopoAppTest database
- * in reverse foreign-key dependency order to prevent constraint errors.
+ * Deletes all records from the PopoAppTest database in reverse foreign-key
+ * dependency order. Self-referencing appointment links are cleared first so
+ * SQL Server does not reject the delete (Msg 547). Errors are NOT swallowed:
+ * a failed cleanup must fail the test run instead of leaking state.
  */
 export async function cleanTestDatabase(): Promise<void> {
   const tablesInOrder = [
@@ -26,12 +28,13 @@ export async function cleanTestDatabase(): Promise<void> {
     'User',
   ];
 
+  await prismaTest.$executeRawUnsafe(
+    'UPDATE [Appointment] SET [rescheduledFromId] = NULL, [rescheduledToId] = NULL'
+  );
+  await prismaTest.$executeRawUnsafe('UPDATE [Client] SET [profilePhotoId] = NULL');
+
   for (const table of tablesInOrder) {
-    try {
-      await prismaTest.$executeRawUnsafe(`DELETE FROM [${table}]`);
-    } catch {
-      // Table may not exist yet during early migration phases; ignore silently
-    }
+    await prismaTest.$executeRawUnsafe(`DELETE FROM [${table}]`);
   }
 }
 

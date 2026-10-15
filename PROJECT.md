@@ -59,13 +59,30 @@ The architecture enforces strict layered boundaries:
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | Foundation, Tooling & Database Schema | Phases 1 & 2: ESLint, Vitest, 18 Prisma domain models, SQL Server LocalDB migrations, Attachment XOR CHECK constraint | none | IN_PROGRESS |
-| M2 | Security, Core Entities & Catalog | Phases 3, 4, 5, 11: Bcrypt auth, Client service + CPF, Procedure catalog, Authenticated file storage pipeline | M1 | PLANNED |
+| M1 | Foundation, Tooling & Database Schema | Phases 1 & 2: ESLint, Vitest, 18 Prisma domain models, SQL Server LocalDB migrations, Attachment XOR CHECK constraint | none | COMPLETED (commit `dc33eb9`) |
+| M2 | Security, Core Entities & Catalog | Phases 3, 4, 5, 11: Bcrypt auth, Client service + CPF, Procedure catalog, Authenticated file storage pipeline | M1 | IN_PROGRESS (Backend done, UI open) |
 | M3 | Clinical Workflows, Products & Inventory | Phases 6, 7, 9, 10: Appointments (6 statuses), Attendance (D1), Inventory & Unit Traceability (reuse rules), Medical Records | M2 | PLANNED |
 | M4 | Financial Engine, Pricing & Reminders | Phases 8, 12, 13, 14: Practiced values, dynamic Total/Outstanding (D2), Payments, Card Installments, In-app reminders, Dashboard metrics | M3 | PLANNED |
 | M5 | Brazilian Portuguese UI Integration & Seed Data | Phases 15 & 16: Seed script (Examples A–E), complete pt-BR UI screens, client detail [id], attendance workspace [id], real API integration | M4 | PLANNED |
 | M6 | Validation Engine & E2E Testing Verification | Phase 17: Implementation track passes 100% of E2E test suite (Tiers 1–4) + Tier 5 Adversarial Coverage Hardening | M5, TEST_READY | PLANNED |
 | M7 | Final Completion Audit & Acceptance Verification | Phase 18: Audit against 22 checklist items, 24 critical validations, D1–D7, R1–R5, and final signoff | M6 | PLANNED |
+
+## Resumption Protocol & Baseline Snapshot
+- **Current Verified Baseline Commit**: `dc33eb9bd4b8086a127e1f016cb7fcae47667a9b`
+- **Database Status**: Microsoft SQL Server LocalDB `MSSQLLocalDB` provisioned with `PopoApp` (dev) and `PopoAppTest` (isolated test). Migration `20261006000000_init_domain_models` applied to both. `CK_Attachment_Ownership` CHECK constraint verified in engine.
+- **Protocol Bridge (Dev/Test Only)**: `tests/helpers/localdb-proxy.js` bridges TCP 1433 to LocalDB Named Pipes (`npm run db:proxy`).
+- **Test Baseline**: 15 test files, 89 tests passing (100% pass rate) via `npm test`.
+- **Code Quality**: `npm run lint` (0 errors), `npm run build` (17/17 pages generated cleanly).
+- **Quick Resumption Commands**:
+  1. `sqllocaldb start MSSQLLocalDB`
+  2. `npm run db:proxy` (in background terminal if port 1433 is not already open)
+  3. `npm test` (verify 89 passing tests)
+  4. `npm run lint` && `npm run build` (verify clean build)
+- **Next Development Focus**:
+  - **Option A (Milestone 2 UI)**: Replace mock data in `src/app/(authenticated)/clientes/page.tsx`, create `/clientes/[id]` clinical detail page, replace mock data in `src/app/(authenticated)/procedimentos/page.tsx`, add attachment upload/gallery components.
+  - **Option B (Milestone 3 Clinical Domain)**: Implement `AppointmentService` (6 statuses, rescheduling cascade per D1), `AttendanceService` (D1 state machine, procedure pricing per D2), `ProductService` (stock unit traceability, reusable vs single-use rules V16–V18), `MedicalRecordService` (1:1 with Attendance).
+
+
 
 ## Interface Contracts
 ### Client Service ↔ Appointment Service

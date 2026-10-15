@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { isValidCpf, normalizeCpf, formatCpf, generateValidCpf } from '../helpers/cpf-validator';
+import { isValidCpf, normalizeCpf, formatCpf } from '@/lib/cpf';
+import { generateValidCpf } from '../helpers/cpf-validator';
 
 describe('Tier 2: CPF Validation Boundaries & Algorithms (D4, AC 62)', () => {
   describe('Normalization & Formatting', () => {
