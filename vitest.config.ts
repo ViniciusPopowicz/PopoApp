@@ -19,6 +19,7 @@ export default defineConfig({
       ...testEnv,
       NODE_ENV: 'test',
     },
+    pool: 'forks',
     poolOptions: {
       forks: {
         singleFork: true,

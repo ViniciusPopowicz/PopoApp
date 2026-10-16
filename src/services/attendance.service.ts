@@ -18,7 +18,11 @@ export class AttendanceService {
   static computeFinancials(attendance: {
     desconto?: Prisma.Decimal | number | null;
     procedures?: { standardValueSnapshot?: Prisma.Decimal | number; practicedValue?: Prisma.Decimal | number }[];
-    payments?: { valor?: Prisma.Decimal | number; status?: string }[];
+    payments?: {
+      valor?: Prisma.Decimal | number;
+      status?: string;
+      pixInstallments?: { valor?: Prisma.Decimal | number; status?: string }[];
+    }[];
   }): AttendanceFinancialsDto {
     const procs = attendance.procedures ?? [];
     const standardTotal = procs.reduce(
@@ -34,9 +38,18 @@ export class AttendanceService {
     const explicitDiscount = Number(attendance.desconto ?? 0);
     const netTotal = Math.max(0, practicedTotal - explicitDiscount);
 
-    const paidTotal = (attendance.payments ?? [])
-      .filter((pay) => pay.status === 'Pago')
-      .reduce((acc, pay) => acc + Number(pay.valor ?? 0), 0);
+    const paidTotal = (attendance.payments ?? []).reduce((acc, pay) => {
+      if (pay.pixInstallments && pay.pixInstallments.length > 0) {
+        const installmentsPaid = pay.pixInstallments
+          .filter((inst) => inst.status === 'Pago')
+          .reduce((sum, inst) => sum + Number(inst.valor ?? 0), 0);
+        return acc + installmentsPaid;
+      }
+      if (pay.status === 'Pago') {
+        return acc + Number(pay.valor ?? 0);
+      }
+      return acc;
+    }, 0);
 
     const outstandingBalance = Math.max(0, netTotal - paidTotal);
     const isFullyPaid = netTotal > 0 && paidTotal >= netTotal;

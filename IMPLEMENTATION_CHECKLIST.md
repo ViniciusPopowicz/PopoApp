@@ -14,24 +14,24 @@
 - **Database Engine**: Microsoft SQL Server LocalDB (`provider = "sqlserver"`)
   - Development DB: `PopoApp`
   - Automated Testing DB: `PopoAppTest` (isolated per D7)
-- **Active Milestone**: Milestone 3 (Clinical Workflows, Products & Inventory — Phases 6, 7, 9, 10)
-- **Overall Progress**: 2 of 18 phases completed (Phase 1: Foundation, Phase 4: Auth & Security); 9 phases in progress (Phases 2, 3, 5, 6, 7, 8, 9, 10, 11 with service/API/database verified against LocalDB; UI pending); 7 phases not started.
+- **Active Milestone**: Milestone 4 (Financial Engine, Payments, Reminders & Dashboard — Phases 12, 13, 14)
+- **Overall Progress**: 2 of 18 phases completed (Phase 1: Foundation, Phase 4: Auth & Security); 12 phases in progress (Phases 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 with domain service/API/database verified against LocalDB; UI pending in Phase 16); 4 phases not started (Phases 16, 17, 18).
 - **Phase Breakdown**:
   - Completed (`[x]`): 2 (Phase 1: Foundation, Phase 4: Auth & Security)
-  - In Progress (`[~]`): 9 (Phase 2: Database and Domain Model, Phase 3: Backend / Domain Logic, Phase 5: Client Management, Phase 6: Appointments, Phase 7: Attendances, Phase 8: Procedure Catalog, Phase 9: Products and Inventory, Phase 10: Medical Records, Phase 11: Attachments)
-  - Not Started (`[ ]`): 7 (Phases 12 through 18)
+  - In Progress (`[~]`): 12 (Phases 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
+  - Not Started (`[ ]`): 4 (Phases 16 through 18)
   - Blocked (`[!]`): 0
   - Needs Decision (`[?]`): 0
-- **Automated Test Coverage**: Vitest runner and .env.test configured for PopoAppTest; 30 test files, 185 tests passing (100%) against live LocalDB PopoAppTest
-- **Mock Data Status**: 8 mock data files present in `src/data/mock/*`; all authenticated pages currently reference mock data and must be migrated to real services (R4).
+- **Automated Test Coverage**: Vitest runner and .env.test configured for PopoAppTest; 40 test files, 257 tests passing (100%) against live LocalDB PopoAppTest with single-fork pool execution
+- **Mock Data Status**: 8 mock data files present in `src/data/mock/*`; all authenticated pages currently reference mock data and will be migrated to real services in Phase 16 (R4).
 
 ---
 
 ## 2. Current Work
 
-- **Phase**: Milestone 3 — Clinical Workflows, Products & Inventory (Phases 6, 7, 9, 10)
-- **Current Task**: Completed implementation and automated verification of all domain types, Zod schemas, domain services, Next.js 15 route handlers, and automated test suites for Milestone 3 per Explorer specifications.
-- **Status**: `[~]` In Progress for Milestone 3 (Backend verified; UI pending in Phase 16)
+- **Phase**: Milestone 4 — Financial Engine, Payments, Reminders & Dashboard (Phases 12, 13, 14)
+- **Current Task**: Completed implementation and automated verification of PaymentService, ReminderService, DashboardService, Next.js 15 route handlers, vitest pool config fix, automated test suites (F09, F10, F27, V20, V21, V22, V23, M4 E2E), and refactored scenarios_a_through_e.spec.ts against live LocalDB PopoAppTest.
+- **Status**: `[~]` In Progress for Milestone 4 (Backend verified; UI pending in Phase 16)
 - **Completed**:
   - **Phase 1 (Tooling & Foundation)**: Vitest installed and configured with `vitest.config.ts`, .env.test isolation, LocalDB proxy helper, ESLint config.
   - **Phase 2 (Database & Schema)**: 18 Prisma domain models, migration deployed to `PopoApp` and `PopoAppTest`, `CK_Attachment_Ownership` CHECK constraint verified in SQL Server LocalDB engine.
@@ -292,33 +292,33 @@ When resuming development, execute these steps in order:
 
 ---
 
-### Phase 12 — Payments and Installments `[ ]` 🔴 HIGH COMPLEXITY
-- `[ ] 🔴 HIGH COMPLEXITY — Multi-method payments, partial payments, credit card installments, and PIX schedules`
-  - `[ ]` Implement `/api/attendances/[id]/payments` API route (GET list, POST record payment)
-  - `[ ]` Implement credit card payment handling with stored installment count (1..12) and zero reminder generation (D5)
-  - `[ ]` Implement PIX installment schedule creation endpoint generating installment plan with due dates and amounts
-  - `[ ]` Implement dynamic computation of total and outstanding balance for attendance (D2)
+### Phase 12 — Payments and Installments `[~]` 🔴 HIGH COMPLEXITY
+- `[~] 🔴 HIGH COMPLEXITY — Multi-method payments, partial payments, credit card installments, and PIX schedules`
+  - `[x]` Implement `/api/attendances/[id]/payments` API route (GET list, POST record payment)
+  - `[x]` Implement credit card payment handling with stored installment count (1..12) and zero reminder generation (D5)
+  - `[x]` Implement PIX installment schedule creation endpoint generating installment plan with due dates and amounts
+  - `[x]` Implement dynamic computation of total and outstanding balance for attendance (D2)
   - `[ ]` Build payment registration modal inside attendance workspace supporting partial payments and multiple methods
   - `[ ]` Build credit card installment selector and PIX installment schedule form
   - `[ ]` Build payment summary component displaying total, paid, and outstanding balance in real time
 
 ---
 
-### Phase 13 — Reminders `[ ]` 🔴 HIGH COMPLEXITY
-- `[ ] 🔴 HIGH COMPLEXITY — In-app reminder engine for PIX installments with financial decoupling`
-  - `[ ]` Implement reminder generation service triggered by PIX installment schedule creation
-  - `[ ]` Implement `/api/reminders` API route (GET list with status filter, POST manual reminder)
-  - `[ ]` Implement `/api/reminders/[id]/status` API route (PATCH mark `concluido` or `dispensado`)
-  - `[ ]` Enforce decoupling rule: marking reminder complete/dismissed never alters payment status or outstanding balance
+### Phase 13 — Reminders `[~]` 🔴 HIGH COMPLEXITY
+- `[~] 🔴 HIGH COMPLEXITY — In-app reminder engine for PIX installments with financial decoupling`
+  - `[x]` Implement reminder generation service triggered by PIX installment schedule creation
+  - `[x]` Implement `/api/reminders` API route (GET list with status filter, POST manual reminder)
+  - `[x]` Implement `/api/reminders/[id]/status` API route (PATCH mark `concluido` or `dispensado`)
+  - `[x]` Enforce decoupling rule: marking reminder complete/dismissed never alters payment status or outstanding balance
   - `[ ]` Build reminders management page (`/lembretes`) with tabs for pending, completed, and dismissed
   - `[ ]` Build dashboard upcoming and overdue PIX reminders widget
   - `[ ]` Replace mock data imports in `src/app/(authenticated)/lembretes/page.tsx`
 
 ---
 
-### Phase 14 — Financial Features `[ ]`
-- `[ ]` Implement `/api/financial/summary` API route (aggregate totals, receivables, paid amounts, payment method breakdowns)
-- `[ ]` Implement `/api/financial/transactions` API route (paginated ledger of all attendance payments)
+### Phase 14 — Financial Features `[~]`
+- `[x]` Implement `/api/financial/summary` API route (aggregate totals, receivables, paid amounts, payment method breakdowns)
+- `[x]` Implement `/api/financial/transactions` API route (paginated ledger of all attendance payments)
 - `[ ]` Build financial dashboard UI (`/financeiro`) with revenue cards, cash flow charts, and accounts receivable list
 - `[ ]` Implement period filters (today, current week, current month, custom range)
 - `[ ]` Replace mock data imports in `src/app/(authenticated)/financeiro/page.tsx`
@@ -649,10 +649,10 @@ The following 6 areas require substantial domain reasoning, complex relational c
 | **V17** | `[x]` | Single-use products must NOT be reused | Second consumption of `isReusable = false` unit strictly rejected (`tests/tier2_boundaries/v16_v17_reusable_cross_client_prevention.spec.ts`) |
 | **V18** | `[x]` | Product Usage must identify an individual physical stock unit | `ProductUsage.individualStockUnitId` non-nullable; tracks physical unit (`tests/tier2_boundaries/v18_single_use_unit_prevention.spec.ts`) |
 | **V19** | `[x]` | Medical Record is exactly ONE per Attendance | `MedicalRecord.attendanceId` unique constraint (1:1) (`tests/tier2_boundaries/v19_medical_record_unique_attendance.spec.ts`) |
-| **V20** | `[ ]` | Attendance may have multiple payments | `Attendance 1:N Payment` supporting partial payments across methods |
-| **V21** | `[ ]` | Credit-card installments do NOT generate collection reminders | Credit card stores installment count ($1..12$) with zero reminder creation |
-| **V22** | `[ ]` | PIX installment schedules may generate reminders | PIX installment plan creates scheduled reminders matching due dates |
-| **V23** | `[ ]` | Reminder state must NOT replace payment truth | Marking reminder `concluido`/`dispensado` never alters payment status or balance |
+| **V20** | `[x]` | Attendance may have multiple payments | `Attendance 1:N Payment` supporting partial payments across methods (`tests/tier2_boundaries/v20_attendance_multiple_payments.spec.ts`, `tests/tier1_features/f09_payment_service.spec.ts`) |
+| **V21** | `[x]` | Credit-card installments do NOT generate collection reminders | Credit card stores installment count ($1..12$) with zero reminder creation (`tests/tier2_boundaries/v21_card_installment_no_reminders.spec.ts`) |
+| **V22** | `[x]` | PIX installment schedules may generate reminders | PIX installment plan creates scheduled reminders matching due dates (`tests/tier2_boundaries/v22_pix_installment_reminders.spec.ts`, `tests/tier1_features/f10_reminder_service.spec.ts`) |
+| **V23** | `[x]` | Reminder state must NOT replace payment truth | Marking reminder `concluido`/`dispensado` never alters payment status or balance (`tests/tier2_boundaries/v23_reminder_state_payment_truth.spec.ts`) |
 | **V24** | `[x]` | Historical records must NOT be rewritten by catalog changes | Catalog edits never mutate historical attendances, prices, or product usages |
 
 ---
@@ -665,7 +665,7 @@ The following 6 areas require substantial domain reasoning, complex relational c
 | **Scenario B** | `[x]` | Explicit Attendance Discount | Two procedures practiced total R$800. Explicit discount R$100. Total is R$700,00. (`tests/tier4_workflows/scenarios_a_through_e.spec.ts`) |
 | **Scenario C** | `[x]` | Reusable Unit Reused for Same Client; Cross-Client Rejected | Unit used for Client A in Attendance 1 & 2 succeeds. Attempt to use for Client B fails with Portuguese error. (`tests/tier4_workflows/scenarios_a_through_e.spec.ts`, `tests/tier2_boundaries/v16_v17_reusable_cross_client_prevention.spec.ts`) |
 | **Scenario D** | `[x]` | Rescheduled Appointment Workflow | Original appointment becomes `Reagendado`, old attendance becomes `Cancelado`. New appointment & attendance created. (`tests/tier4_workflows/scenarios_a_through_e.spec.ts`, `tests/tier1_features/f17_appointment_service.spec.ts`) |
-| **Scenario E** | `[ ]` | Multiple Payment Methods & Installments | Total R$1.000. R$400 paid via Credit Card (2x, 0 reminders). R$600 scheduled in 3x PIX (3 reminders). Outstanding updates accurately. |
+| **Scenario E** | `[x]` | Multiple Payment Methods & Installments | Total R$1.000. R$400 paid via Credit Card (2x, 0 reminders). R$600 scheduled in 3x PIX (3 reminders). Outstanding updates accurately. (`tests/tier3_combinations/m4_financial_reminders_e2e.spec.ts`, `tests/tier2_boundaries/v20_attendance_multiple_payments.spec.ts`) |
 
 ---
 
@@ -692,6 +692,38 @@ The following 6 areas require substantial domain reasoning, complex relational c
   - Authored comprehensive automated test suites: Tier 1 Feature tests (f17, f18, f20, f21, f22), Tier 2 Boundary tests (v08, v09, v15, v16_v17, v18, v19), Tier 3 Combination test (`m3_clinical_workflow_e2e.spec.ts`).
   - Total test suite expanded from 15 files / 89 tests to 30 test files / 185 tests, 100% passing against live LocalDB `PopoAppTest`.
   - Clean `npm run lint` (0 errors) and clean `npm run build` (all routes compiled cleanly).
+- **2026-10-16** — Milestone 4 (Phases 12, 13, 14 backend, tests, route handlers) completed by Worker M4 1:
+  - Vitest test harness optimization: updated `vitest.config.ts` to include `pool: 'forks'`, activating single-fork sequential execution without thread worker collisions against SQL Server LocalDB.
+  - Implemented domain types and schemas: `src/types/payment.ts`, `src/schemas/payment.ts`, `src/types/reminder.ts`, `src/schemas/reminder.ts`, `src/types/dashboard.ts`, `src/schemas/dashboard.ts`.
+  - Implemented domain services:
+    - `PaymentService`: full/partial payments across multiple methods (V20, D2), Credit Card stored installment counts (1..12) with zero PixInstallments and zero reminders (V21, D5), PIX installment schedule creation with exact cent rounding and automated in-app reminder generation (V22, D5), `payPixInstallment` and status transitions, overpayment protection against outstanding balance or advance appointment estimated ceiling.
+    - `ReminderService`: strictly in-app reminders (D5), list/filter with `isOverdue` temporal calculation, status transitions to `concluido` or `dispensado` with `completedAt`, dashboard feed of upcoming & overdue PIX installments, self-healing sync, and total decoupling invariant (V23 & AC 68: reminder actions strictly NEVER alter payment status or balance).
+    - `DashboardService`: executive metrics (gross revenue, discounts, net revenue, received cash, accounts receivable), cash flow breakdown by method, appointment and attendance volume metrics today, low-stock alerts for products with $\le 5$ available units, and reminders widget.
+    - Enhanced `AttendanceService.computeFinancials` to aggregate paid PIX installments.
+  - Implemented Next.js 15 App Router API route handlers with awaited dynamic params:
+    - `/api/attendances/[id]/payments` (GET, POST)
+    - `/api/attendances/[id]/payments/pix-schedule` (POST)
+    - `/api/payments/[id]` (GET, DELETE)
+    - `/api/payments/installments/[id]/pay` (POST) and `/api/pix-installments/[id]/pay` (POST alias)
+    - `/api/reminders` (GET, POST)
+    - `/api/reminders/[id]` (GET, PATCH, DELETE)
+    - `/api/reminders/[id]/status` (PATCH)
+    - `/api/reminders/dashboard` (GET)
+    - `/api/dashboard/summary` (GET)
+    - `/api/financial/summary` (GET)
+    - `/api/financial/transactions` (GET)
+  - Authored comprehensive automated test suites:
+    - `tests/tier1_features/f09_payment_service.spec.ts` (7 tests)
+    - `tests/tier1_features/f10_reminder_service.spec.ts` (6 tests)
+    - `tests/tier1_features/f27_dashboard_service.spec.ts` (6 tests)
+    - `tests/tier2_boundaries/v20_attendance_multiple_payments.spec.ts` (5 tests)
+    - `tests/tier2_boundaries/v21_card_installment_no_reminders.spec.ts` (5 tests)
+    - `tests/tier2_boundaries/v22_pix_installment_reminders.spec.ts` (5 tests)
+    - `tests/tier2_boundaries/v23_reminder_state_payment_truth.spec.ts` (5 tests)
+    - `tests/tier3_combinations/m4_financial_reminders_e2e.spec.ts` (1 test)
+    - Refactored `tests/tier4_workflows/scenarios_a_through_e.spec.ts` (5 tests) to exercise real domain services.
+  - Full automated suite: 40 test files, 257 tests passing with 0 failures (100% pass rate) on LocalDB `PopoAppTest`.
+  - Clean `npm run lint` (0 errors) and clean `npm run build`.
 
 ---
 
