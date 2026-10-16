@@ -60,8 +60,8 @@ The architecture enforces strict layered boundaries:
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
 | M1 | Foundation, Tooling & Database Schema | Phases 1 & 2: ESLint, Vitest, 18 Prisma domain models, SQL Server LocalDB migrations, Attachment XOR CHECK constraint | none | COMPLETED (commit `dc33eb9`) |
-| M2 | Security, Core Entities & Catalog | Phases 3, 4, 5, 11: Bcrypt auth, Client service + CPF, Procedure catalog, Authenticated file storage pipeline | M1 | IN_PROGRESS (Backend done, UI open) |
-| M3 | Clinical Workflows, Products & Inventory | Phases 6, 7, 9, 10: Appointments (6 statuses), Attendance (D1), Inventory & Unit Traceability (reuse rules), Medical Records | M2 | PLANNED |
+| M2 | Security, Core Entities & Catalog | Phases 3, 4, 5, 11: Bcrypt auth, Client service + CPF, Procedure catalog, Authenticated file storage pipeline | M1 | COMPLETED (Gate PASSED, commit `5a17482`) |
+| M3 | Clinical Workflows, Products & Inventory | Phases 6, 7, 9, 10: Appointments (6 statuses), Attendance (D1), Inventory & Unit Traceability (reuse rules), Medical Records | M2 | IN_PROGRESS (Backend done, 30 test files / 185 tests pass) |
 | M4 | Financial Engine, Pricing & Reminders | Phases 8, 12, 13, 14: Practiced values, dynamic Total/Outstanding (D2), Payments, Card Installments, In-app reminders, Dashboard metrics | M3 | PLANNED |
 | M5 | Brazilian Portuguese UI Integration & Seed Data | Phases 15 & 16: Seed script (Examples A–E), complete pt-BR UI screens, client detail [id], attendance workspace [id], real API integration | M4 | PLANNED |
 | M6 | Validation Engine & E2E Testing Verification | Phase 17: Implementation track passes 100% of E2E test suite (Tiers 1–4) + Tier 5 Adversarial Coverage Hardening | M5, TEST_READY | PLANNED |

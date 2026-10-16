@@ -14,41 +14,48 @@
 - **Database Engine**: Microsoft SQL Server LocalDB (`provider = "sqlserver"`)
   - Development DB: `PopoApp`
   - Automated Testing DB: `PopoAppTest` (isolated per D7)
-- **Active Milestone**: Milestone 2 (Security, Core Entities & Catalog)
-- **Overall Progress**: 2 of 18 phases completed (Phase 1: Foundation, Phase 4: Auth & Security); 5 phases in progress (Phases 2, 3, 5, 8, 11 with service/API/database verified against LocalDB; UI pending); 11 phases not started.
+- **Active Milestone**: Milestone 3 (Clinical Workflows, Products & Inventory — Phases 6, 7, 9, 10)
+- **Overall Progress**: 2 of 18 phases completed (Phase 1: Foundation, Phase 4: Auth & Security); 9 phases in progress (Phases 2, 3, 5, 6, 7, 8, 9, 10, 11 with service/API/database verified against LocalDB; UI pending); 7 phases not started.
 - **Phase Breakdown**:
   - Completed (`[x]`): 2 (Phase 1: Foundation, Phase 4: Auth & Security)
-  - In Progress (`[~]`): 5 (Phase 2: Database and Domain Model, Phase 3: Backend / Domain Logic, Phase 5: Client Management, Phase 8: Procedure Catalog, Phase 11: Attachments)
-  - Not Started (`[ ]`): 11 (Phases 6, 7, 9, 10, 12 through 18)
+  - In Progress (`[~]`): 9 (Phase 2: Database and Domain Model, Phase 3: Backend / Domain Logic, Phase 5: Client Management, Phase 6: Appointments, Phase 7: Attendances, Phase 8: Procedure Catalog, Phase 9: Products and Inventory, Phase 10: Medical Records, Phase 11: Attachments)
+  - Not Started (`[ ]`): 7 (Phases 12 through 18)
   - Blocked (`[!]`): 0
   - Needs Decision (`[?]`): 0
-- **Automated Test Coverage**: Vitest runner and .env.test configured for PopoAppTest; 15 test files, 89 tests passing (100%) against live LocalDB
+- **Automated Test Coverage**: Vitest runner and .env.test configured for PopoAppTest; 30 test files, 185 tests passing (100%) against live LocalDB PopoAppTest
 - **Mock Data Status**: 8 mock data files present in `src/data/mock/*`; all authenticated pages currently reference mock data and must be migrated to real services (R4).
 
 ---
 
 ## 2. Current Work
 
-- **Phase**: Milestone 2 — Security, Core Entities & Catalog (Phases 3, 4, 5, 8, 11)
-- **Current Task**: Baseline verified against SQL Server LocalDB migrations and passing test suite (15 test files, 89 tests passing with 0 failures). Downgraded premature `[x]` markers for Phases 5, 8, 11 to `[~]` since UI screens remain pending.
-- **Status**: `[~]` In Progress for Milestone 2
+- **Phase**: Milestone 3 — Clinical Workflows, Products & Inventory (Phases 6, 7, 9, 10)
+- **Current Task**: Completed implementation and automated verification of all domain types, Zod schemas, domain services, Next.js 15 route handlers, and automated test suites for Milestone 3 per Explorer specifications.
+- **Status**: `[~]` In Progress for Milestone 3 (Backend verified; UI pending in Phase 16)
 - **Completed**:
   - **Phase 1 (Tooling & Foundation)**: Vitest installed and configured with `vitest.config.ts`, .env.test isolation, LocalDB proxy helper, ESLint config.
   - **Phase 2 (Database & Schema)**: 18 Prisma domain models, migration deployed to `PopoApp` and `PopoAppTest`, `CK_Attachment_Ownership` CHECK constraint verified in SQL Server LocalDB engine.
   - **Phase 3 (Auth & Session)**: Implemented `src/services/auth.service.ts` with real Prisma user lookup and `bcrypt.compare`; hardened `src/middleware.ts` to return JSON 401 for unauthenticated `/api/*` requests per AC 60.
   - **Phase 4 (Authentication and Security)**: Real bcrypt auth, route protection, authenticated file streaming (`/api/attachments/[id]`), MIME validation.
   - **Phase 5 (Client Management - Backend)**: Implemented `src/lib/cpf.ts` (MOD 11, repeated digit checks, normalization and masking), `src/schemas/client.ts` with Zod, `src/services/client.service.ts` with unique CPF handling (P2002 conflict handling per AC 62, V01, V02), 1:N emergency contacts (V13) with input order preservation, soft-deactivation toggle (`ativo`/`inativo` per V05), and real derived history. Implemented `/api/clients`, `/api/clients/[id]`, `/api/clients/[id]/contacts`, and `/api/clients/[id]/contacts/[contactId]`.
+  - **Phase 6 (Appointments - Backend)**: Implemented `src/types/appointment.ts`, `src/schemas/appointment.ts`, `src/services/appointment.service.ts` (6 valid statuses, prohibited `Em atendimento` per V03, auto-create `Pendente` attendance per D1/V07, atomic reschedule cascade with `rescheduledFromId`/`rescheduledToId` per D1/V04, cancel and no-show cascades, completion guard requiring completed attendance per V08, planned procedures per D3). Implemented route handlers: `/api/appointments`, `/api/appointments/[id]`, `/api/appointments/[id]/confirm`, `/api/appointments/[id]/cancel`, `/api/appointments/[id]/no-show`, `/api/appointments/[id]/reschedule`, `/api/appointments/[id]/complete`, `/api/appointments/[id]/status`.
+  - **Phase 7 (Attendances - Backend)**: Implemented `src/types/attendance.ts`, `src/schemas/attendance.ts`, `src/services/attendance.service.ts` (D1 state machine `Pendente`/`Realizado`/`Cancelado`, procedure snapshot imutability `standardValueSnapshot` per V09/V12/V24, explicit practiced value `practicedValue` per V08, explicit discount validation per V11, dynamic D2 financial calculation). Implemented route handlers: `/api/attendances`, `/api/attendances/[id]`, `/api/attendances/[id]/status`, `/api/attendances/[id]/complete`, `/api/attendances/[id]/cancel`, `/api/attendances/[id]/procedures`, `/api/attendances/[id]/procedures/[procId]`, `/api/attendances/[id]/prefill`, `/api/attendances/[id]/discount`, `/api/attendances/[id]/usages`, `/api/attendances/[id]/record`.
   - **Phase 8 (Procedure Catalog - Backend)**: Implemented `src/types/procedure.ts`, `src/schemas/procedure.ts` (positive standard value `valorPadrao > 0` per V06, mandatory fields per V07), `src/services/procedure.service.ts` with soft deactivation fallback on relational usage, and API routes `/api/procedures` and `/api/procedures/[id]`.
+  - **Phase 9 (Products and Inventory - Backend)**: Implemented `src/types/product.ts`, `src/schemas/product.ts`, `src/services/product.service.ts` (catalog CRUD, procedure associations, low stock calculation), `src/services/stock.service.ts` (batch lot intake with automatic physical `StockUnit` generation, serial uniqueness, available unit querying excluding expired lots per V15, `recordProductUsage` enforcing expired lot block per V15, single-use second use block per V18, same-client reuse per V16, and cross-client block with Portuguese error per V17, AC 59, AC 66). Implemented route handlers: `/api/products`, `/api/products/[id]`, `/api/products/[id]/lots`, `/api/lots/[id]`, `/api/lots/[id]/units`, `/api/stock/units`, `/api/stock/units/[id]`.
+  - **Phase 10 (Medical Records - Backend)**: Implemented `src/types/medical-record.ts`, `src/schemas/medical-record.ts` (canonical fields + clinical aliases `anamnese`, `evolucaoClinica`, `orientacoesPosProcedimento`, `intercorrencias`), `src/services/medical-record.service.ts` enforcing strict 1:1 relationship with Attendance per V19. Route handler: `/api/attendances/[id]/record`.
   - **Phase 11 (Authenticated File Storage - Backend)**: Implemented `src/services/attachment.service.ts` with local disk storage outside web root (`./storage/uploads`), UUID filenames, MIME allowlist (JPEG, PNG, WebP, PDF per V12), 10MB limit (V13), Client XOR Attendance exclusivity (V14, AC 61), and atomic profile photo replacement. Implemented `/api/attachments`, `/api/attachments/[id]` (secure streaming with 401 unauth check, `nosniff`, private cache), and `/api/clients/[id]/photo`.
-  - **Testing**: 15 test files, 89 tests passing cleanly against live LocalDB database `PopoAppTest`.
+  - **Phase 15 (Client History Endpoint - Backend)**: Implemented `/api/clients/[id]/history` aggregating full chronological clinical and financial timeline.
+  - **Testing**: 30 test files, 185 tests passing cleanly against live LocalDB database `PopoAppTest` (0 failures).
 - **Remaining**:
-  - UI screens for Milestone 2:
-    - Client UI (`/clientes` list, registration dialog, `/clientes/[id]` clinical detail page with tabbed history)
-    - Procedure Catalog UI (`/procedimentos` catalog, pricing modal, category filters)
-    - Attachment UI (gallery component, document uploader, photo upload modal)
-  - Milestone 3: Scheduling, Clinical Encounter & Product Traceability (Phases 6, 7, 9, 10).
+  - UI screens for Milestone 2 & Milestone 3 (all UI items remain `[ ]` until Phase 16):
+    - Client UI (`/clientes`, `/clientes/[id]`)
+    - Agenda Calendar UI (`/agenda`)
+    - Attendance Clinical Workspace UI (`/atendimentos`, `/atendimentos/[id]`)
+    - Procedure Catalog UI (`/procedimentos`)
+    - Product and Stock Traceability UI (`/produtos`)
+  - Milestone 4: Financial Ledger, Payments & Reminders (Phases 12, 13, 14).
 - **Immediate Next Action**:
-  - Build UI screens for Client, Procedure, and Attachment workspaces (or proceed with Milestone 3 Appointments & Attendances domain services).
+  - Proceed with Milestone 4 (Financial Ledger, Payments & Reminders - Phases 12, 13, 14) or build UI components for Milestones 2 & 3 in Phase 16.
 - **Blockers**: None.
 - **Pending Decisions**: None (Binding decisions D1–D7 established).
 
@@ -70,7 +77,7 @@ When resuming development, execute these steps in order:
 3. **Verify Baseline Tests**:
    ```powershell
    npm test
-   # Expected: 15 test files passed, 89 passed (0 failures)
+   # Expected: 30 test files passed, 185 passed (0 failures)
    ```
 4. **Verify Build & Lint**:
    ```powershell
@@ -90,19 +97,19 @@ When resuming development, execute these steps in order:
 |---|---|---|---|---|
 | **Phase 1** | Project Discovery and Architecture | Standard | `[x]` | Repository inspected, stack audited, mock dependencies mapped, PROJECT.md and checklist created, Vitest installed & configured, ESLint configured. |
 | **Phase 2** | Database and Domain Model | 🔴 **HIGH COMPLEXITY** | `[~]` | 18 Prisma domain models, migration applied to PopoApp & PopoAppTest, CK_Attachment_Ownership CHECK constraint verified in DB; clinical seed pending. |
-| **Phase 3** | Backend / Domain Logic | Standard | `[~]` | Domain services for auth, client, procedure, attachment; CPF validator; snapshot preservation; remaining domain services pending. |
+| **Phase 3** | Backend / Domain Logic | Standard | `[~]` | Domain services for auth, client, procedure, attachment, appointment, attendance, product, stock, prontuário; payments/reminders pending. |
 | **Phase 4** | Authentication and Security | Standard | `[x]` | Real bcrypt auth, route protection, authenticated file streaming (`/api/attachments/[id]`), MIME validation. |
 | **Phase 5** | Client Management | Standard | `[~]` | Client service, unique mandatory CPF, 1:N emergency contacts, profile photo replacement, API routes done; UI pages pending. |
-| **Phase 6** | Appointments | Standard | `[ ]` | 6 statuses, calendar view, manual confirmation, cancellation with reason, atomic rescheduling, planned procedures. |
-| **Phase 7** | Attendances | 🔴 **HIGH COMPLEXITY** | `[ ]` | D1 state machine, procedure associations, practiced values, explicit discount, clinical workspace. |
+| **Phase 6** | Appointments | Standard | `[~]` | 6 statuses, cancellation with reason, atomic rescheduling, planned procedures, API routes done; agenda UI pending. |
+| **Phase 7** | Attendances | 🔴 **HIGH COMPLEXITY** | `[~]` | D1 state machine, procedure associations, practiced values, explicit discount, D2 financial calculations, API routes done; clinical workspace UI pending. |
 | **Phase 8** | Procedures and Pricing | Standard | `[~]` | Procedure catalog CRUD service, standard values, snapshots, API routes done; UI pages pending. |
-| **Phase 9** | Products and Inventory | 🔴 **HIGH COMPLEXITY** | `[ ]` | Product catalog, lots, physical units, same-client reuse, cross-client prohibition, single-use restrictions. |
-| **Phase 10** | Medical Records | Standard | `[ ]` | Prontuário 1:1 with Attendance, clinical documentation fields, client history integration. |
+| **Phase 9** | Products and Inventory | 🔴 **HIGH COMPLEXITY** | `[~]` | Product catalog, lots, physical units, same-client reuse, cross-client prohibition, single-use restrictions, API routes done; UI pending. |
+| **Phase 10** | Medical Records | Standard | `[~]` | Prontuário 1:1 with Attendance, clinical documentation fields, client history integration, API routes done; UI pending. |
 | **Phase 11** | Attachments | 🔴 **HIGH COMPLEXITY** | `[~]` | Storage outside `public/`, Client XOR Attendance exclusivity, secure streaming API done; UI components pending. |
 | **Phase 12** | Payments and Installments | 🔴 **HIGH COMPLEXITY** | `[ ]` | Multi-method payments, partial payments, credit card installments (0 reminders), PIX installment schedule. |
 | **Phase 13** | Reminders | 🔴 **HIGH COMPLEXITY** | `[ ]` | In-app reminders for PIX installments, dashboard widget, mark done/dismissed decoupled from payments. |
 | **Phase 14** | Financial Features | Standard | `[ ]` | Attendance financial summary, dynamic Total/Outstanding calculation (D2), financial ledger dashboard. |
-| **Phase 15** | Client History | Standard | `[ ]` | Chronological history on `/clientes/[id]` derived from real records (zero fake history tables). |
+| **Phase 15** | Client History | Standard | `[~]` | Chronological history API route `/api/clients/[id]/history` derived from real records; UI pending. |
 | **Phase 16** | Frontend / UX | Standard | `[ ]` | Zero mock imports, Brazilian Portuguese text, responsive design, dialogs, loading/empty/error states. |
 | **Phase 17** | Validation and Testing | Standard | `[ ]` | Automated suite (Tiers 1–4), 24 critical validations tested, Scenarios A–E tested on `PopoAppTest`. |
 | **Phase 18** | Final Review and Stabilization | Standard | `[ ]` | Specification audit, database audit, code audit, 22 final review items verified, zero false completions. |
@@ -161,23 +168,23 @@ When resuming development, execute these steps in order:
 ---
 
 ### Phase 3 — Backend / Domain Logic `[~]`
-- `[~]` Create validation schemas with Zod for domain inputs (`src/types/validations.ts` - schemas for auth, client, procedure completed; remaining entities pending)
+- `[~]` Create validation schemas with Zod for domain inputs (`src/schemas/*` - schemas for auth, client, procedure, appointment, attendance, product, lot, stock, prontuário completed; payments & reminders pending)
 - `[x]` Implement Brazilian CPF validation algorithm (MOD 11 checksum verification and string normalization)
 - `[x]` Implement `ClientService` business logic with CPF uniqueness and emergency contacts handling
-- `[ ]` Implement `AppointmentService` with 6 statuses and prohibition of `Em atendimento`
-- `[ ]` Implement atomic rescheduling transaction (old -> `Reagendado`, old attendance -> `Cancelado`, new appointment + attendance)
-- `[ ]` Implement cancellation and no-show transactions with cascade to pending attendance
-- `[ ]` Implement `AttendanceService` lifecycle state machine (D1: auto-pending, manual Realizado)
+- `[x]` Implement `AppointmentService` with 6 statuses and prohibition of `Em atendimento`
+- `[x]` Implement atomic rescheduling transaction (old -> `Reagendado`, old attendance -> `Cancelado`, new appointment + attendance)
+- `[x]` Implement cancellation and no-show transactions with cascade to pending attendance
+- `[x]` Implement `AttendanceService` lifecycle state machine (D1: auto-pending, manual Realizado)
 - `[x]` Implement `ProcedureService` catalog CRUD and snapshot preservation logic
-- `[ ]` Implement attendance procedure association requiring explicit `practicedValue`
-- `[ ]` Implement explicit attendance discount application (validating discount <= sum of practiced values)
-- `[ ]` Implement dynamic financial calculation engine (D2: Total = practiced - discount; Outstanding = Total - paid)
-- `[ ]` Implement `ProductService` catalog and lot management
-- `[ ]` Implement `InventoryService` physical unit tracking:
-  - `[ ]` Enforce same-client reuse of reusable physical units
-  - `[ ]` Strictly reject cross-client reuse of physical units with Portuguese error
-  - `[ ]` Strictly reject second use of single-use physical units
-- `[ ]` Implement `MedicalRecordService` ensuring exactly 1:1 relation with attendance
+- `[x]` Implement attendance procedure association requiring explicit `practicedValue`
+- `[x]` Implement explicit attendance discount application (validating discount <= sum of practiced values)
+- `[x]` Implement dynamic financial calculation engine (D2: Total = practiced - discount; Outstanding = Total - paid)
+- `[x]` Implement `ProductService` catalog and lot management
+- `[x]` Implement `StockService` (Inventory) physical unit tracking:
+  - `[x]` Enforce same-client reuse of reusable physical units
+  - `[x]` Strictly reject cross-client reuse of physical units with Portuguese error
+  - `[x]` Strictly reject second use of single-use physical units
+- `[x]` Implement `MedicalRecordService` ensuring exactly 1:1 relation with attendance
 - `[ ]` Implement `PaymentService` handling partial payments, multiple methods, and card installment counts
 - `[ ]` Implement `ReminderService` creating in-app reminders for PIX installments and decoupling reminder state from payments
 
@@ -206,13 +213,13 @@ When resuming development, execute these steps in order:
 
 ---
 
-### Phase 6 — Appointments `[ ]`
-- `[ ]` Implement `/api/appointments` API route (GET filtered by date range, POST create with auto-pending attendance)
-- `[ ]` Implement `/api/appointments/[id]` API route (GET detail, PATCH update status)
-- `[ ]` Implement `/api/appointments/[id]/confirm` endpoint (manual confirmation)
-- `[ ]` Implement `/api/appointments/[id]/cancel` endpoint (mandatory cancellation reason, auto-cancel pending attendance)
-- `[ ]` Implement `/api/appointments/[id]/no-show` endpoint (mark `Não compareceu`, auto-cancel pending attendance)
-- `[ ]` Implement `/api/appointments/[id]/reschedule` endpoint (atomic reschedule transaction)
+### Phase 6 — Appointments `[~]`
+- `[x]` Implement `/api/appointments` API route (GET filtered by date range, POST create with auto-pending attendance)
+- `[x]` Implement `/api/appointments/[id]` API route (GET detail, PATCH update status)
+- `[x]` Implement `/api/appointments/[id]/confirm` endpoint (manual confirmation)
+- `[x]` Implement `/api/appointments/[id]/cancel` endpoint (mandatory cancellation reason, auto-cancel pending attendance)
+- `[x]` Implement `/api/appointments/[id]/no-show` endpoint (mark `Não compareceu`, auto-cancel pending attendance)
+- `[x]` Implement `/api/appointments/[id]/reschedule` endpoint (atomic reschedule transaction)
 - `[ ]` Build agenda calendar UI (`/agenda`) with Day, Week, and Month views connected to live API
 - `[ ]` Build appointment creation modal supporting client selection and planned procedures
 - `[ ]` Build appointment detail dialog showing status, planned procedures, cancellation reason, and link to attendance
@@ -221,14 +228,14 @@ When resuming development, execute these steps in order:
 
 ---
 
-### Phase 7 — Attendances `[ ]` 🔴 HIGH COMPLEXITY
-- `[ ] 🔴 HIGH COMPLEXITY — Attendance lifecycle, procedure pricing, clinical workspace, and completion`
-  - `[ ]` Implement `/api/attendances` API route (GET list, POST create additional attendance for appointment)
-  - `[ ]` Implement `/api/attendances/[id]` API route (GET full clinical details, PATCH update)
-  - `[ ]` Implement `/api/attendances/[id]/procedures` API route (add/remove procedures with practiced values)
-  - `[ ]` Implement `/api/attendances/[id]/discount` API route (set explicit discount)
-  - `[ ]` Implement `/api/attendances/[id]/complete` API route (manually mark `Realizado` when service occurs)
-  - `[ ]` Implement `/api/attendances/[id]/cancel` API route (cancel attendance)
+### Phase 7 — Attendances `[~]` 🔴 HIGH COMPLEXITY
+- `[~] 🔴 HIGH COMPLEXITY — Attendance lifecycle, procedure pricing, clinical workspace, and completion`
+  - `[x]` Implement `/api/attendances` API route (GET list, POST create additional attendance for appointment)
+  - `[x]` Implement `/api/attendances/[id]` API route (GET full clinical details, PATCH update)
+  - `[x]` Implement `/api/attendances/[id]/procedures` API route (add/remove procedures with practiced values)
+  - `[x]` Implement `/api/attendances/[id]/discount` API route (set explicit discount)
+  - `[x]` Implement `/api/attendances/[id]/complete` API route (manually mark `Realizado` when service occurs)
+  - `[x]` Implement `/api/attendances/[id]/cancel` API route (cancel attendance)
   - `[ ]` Build attendances list page (`/atendimentos`) with filters by status (`Pendente`, `Realizado`, `Cancelado`) and client
   - `[ ]` Build dedicated Attendance Clinical Workspace page (`/atendimentos/[id]`) (§43)
   - `[ ]` Integrate Procedure selection with standard value snapshot and practiced value inputs
@@ -238,7 +245,7 @@ When resuming development, execute these steps in order:
 
 ---
 
-### Phase 8 — Procedures and Pricing `[x]`
+### Phase 8 — Procedures and Pricing `[~]`
 - `[x]` Implement `/api/procedures` API route (GET catalog, POST create procedure)
 - `[x]` Implement `/api/procedures/[id]` API route (GET detail, PUT update, PATCH toggle active status)
 - `[x]` Verify catalog price changes do not mutate historical `standardValueSnapshot` or `practicedValue`
@@ -248,14 +255,14 @@ When resuming development, execute these steps in order:
 
 ---
 
-### Phase 9 — Products and Inventory `[ ]` 🔴 HIGH COMPLEXITY
-- `[ ] 🔴 HIGH COMPLEXITY — Product catalog, lot intake, individual stock unit traceability, and reuse rules`
-  - `[ ]` Implement `/api/products` API route (GET catalog, POST create product with `isReusable` flag)
-  - `[ ]` Implement `/api/products/[id]` API route (GET detail, PUT update)
-  - `[ ]` Implement `/api/products/[id]/lots` API route (POST create lot with batch number and expiration date)
-  - `[ ]` Implement `/api/lots/[id]/units` API route (POST register individual physical stock units)
-  - `[ ]` Implement `/api/stock/units` API route (GET unit search with availability and client-reuse status)
-  - `[ ]` Implement `/api/attendances/[id]/usages` API route (POST record unit usage with reuse validation)
+### Phase 9 — Products and Inventory `[~]` 🔴 HIGH COMPLEXITY
+- `[~] 🔴 HIGH COMPLEXITY — Product catalog, lot intake, individual stock unit traceability, and reuse rules`
+  - `[x]` Implement `/api/products` API route (GET catalog, POST create product with `isReusable` flag)
+  - `[x]` Implement `/api/products/[id]` API route (GET detail, PUT update)
+  - `[x]` Implement `/api/products/[id]/lots` API route (POST create lot with batch number and expiration date)
+  - `[x]` Implement `/api/lots/[id]/units` API route (POST register individual physical stock units)
+  - `[x]` Implement `/api/stock/units` API route (GET unit search with availability and client-reuse status)
+  - `[x]` Implement `/api/attendances/[id]/usages` API route (POST record unit usage with reuse validation)
   - `[ ]` Build product catalog UI (`/produtos`) showing category, reusable badge, and lot count
   - `[ ]` Build lot intake and physical unit registration modal (barcodes / serial identifiers)
   - `[ ]` Build unit traceability viewer showing unit history, current client assignment, and status
@@ -264,16 +271,16 @@ When resuming development, execute these steps in order:
 
 ---
 
-### Phase 10 — Medical Records `[ ]`
-- `[ ]` Implement `/api/attendances/[id]/medical-record` API route (GET and PUT/POST clinical record)
-- `[ ]` Enforce strict 1:1 database constraint between Attendance and MedicalRecord
+### Phase 10 — Medical Records `[~]`
+- `[x]` Implement `/api/attendances/[id]/medical-record` API route (GET and PUT/POST clinical record)
+- `[x]` Enforce strict 1:1 database constraint between Attendance and MedicalRecord
 - `[ ]` Build Prontuário component inside Attendance workspace with clinical fields (queixa principal, exame físico, conduta, orientações)
 - `[ ]` Include Medical Record history in Client detail view (`/clientes/[id]`)
 
 ---
 
-### Phase 11 — Attachments `[x]` 🔴 HIGH COMPLEXITY
-- `[x] 🔴 HIGH COMPLEXITY — Secure local file storage, ownership exclusivity (Client XOR Attendance), and streaming access`
+### Phase 11 — Attachments `[~]` 🔴 HIGH COMPLEXITY
+- `[~] 🔴 HIGH COMPLEXITY — Secure local file storage, ownership exclusivity (Client XOR Attendance), and streaming access`
   - `[x]` Implement `/api/attachments/upload` API route (POST multipart file, clientId OR attendanceId)
   - `[x]` Enforce database CHECK constraint `CK_Attachment_Ownership` (XOR exclusivity)
   - `[x]` Implement file upload validation (allowed types: JPEG, PNG, WebP, PDF; max size: 10MB)
@@ -318,10 +325,10 @@ When resuming development, execute these steps in order:
 
 ---
 
-### Phase 15 — Client History `[ ]`
-- `[ ]` Implement `/api/clients/[id]/history` API route aggregating real records into chronological timeline
-- `[ ]` Ensure history aggregates: Appointments, Attendances, Performed Procedures, Product Usages, Prontuários, Payments, and Attachments
-- `[ ]` Verify no artificial `ClientHistory` table exists (derived strictly from domain records)
+### Phase 15 — Client History `[~]`
+- `[x]` Implement `/api/clients/[id]/history` API route aggregating real records into chronological timeline
+- `[x]` Ensure history aggregates: Appointments, Attendances, Performed Procedures, Product Usages, Prontuários, Payments, and Attachments
+- `[x]` Verify no artificial `ClientHistory` table exists (derived strictly from domain records)
 - `[ ]` Build tabbed and chronological history timeline components inside `/clientes/[id]`
 
 ---
@@ -611,10 +618,10 @@ The following 6 areas require substantial domain reasoning, complex relational c
 - `[x]` Configure `npm test` script in `package.json`
 
 ### Test Tiers Overview
-- `[ ]` **Tier 1: Feature Coverage Suite** (>=5 tests per core feature across all domain models)
-- `[ ]` **Tier 2: Boundary & Corner Cases Suite** (CPF checksum edge cases, decimal precision, stock boundaries, attachment XOR constraint)
-- `[ ]` **Tier 3: Cross-Feature Combinations Suite** (Appointment lifecycle transitions, attendance completion, payment allocation, reuse enforcement)
-- `[ ]` **Tier 4: Real-World Clinical Workflows Suite** (End-to-end execution of Scenarios A through E from spec §47)
+- `[x]` **Tier 1: Feature Coverage Suite** (>=5 tests per core feature across all domain models: 11 test files, 69 tests)
+- `[x]` **Tier 2: Boundary & Corner Cases Suite** (CPF checksum edge cases, decimal precision, stock boundaries, attachment XOR constraint: 10 test files, 29 tests)
+- `[x]` **Tier 3: Cross-Feature Combinations Suite** (Appointment lifecycle transitions, attendance completion, payment allocation, reuse enforcement: 2 test files, 4 tests)
+- `[x]` **Tier 4: Real-World Clinical Workflows Suite** (End-to-end execution of Scenarios A through E from spec §47: 1 test file, 5 tests)
 - `[ ]` **Tier 5: Adversarial Coverage Hardening** (White-box adversarial edge cases, unauthenticated API probes, concurrency checks)
 
 ---
@@ -623,25 +630,25 @@ The following 6 areas require substantial domain reasoning, complex relational c
 
 | # | Status | Validation Description | Target Entity / Rule |
 |---|---|---|---|
-| **V01** | `[ ]` | Appointment must belong to exactly one Client | `Appointment.clientId` required foreign key |
-| **V02** | `[ ]` | Appointment status must be one of the defined 6 statuses | Valid statuses: Agendado, Confirmado, Concluído, Cancelado, Não compareceu, Reagendado |
-| **V03** | `[ ]` | `Em atendimento` must NOT exist as an Appointment status | Explicitly forbidden status |
-| **V04** | `[ ]` | Rescheduling preserves old appointment as `Reagendado` and creates a new Appointment | Atomic rescheduling transaction; old attendance cancelled, new attendance created |
-| **V05** | `[ ]` | Attendance is distinct from its Appointment | Independent entity, separate lifecycle and ID |
-| **V06** | `[ ]` | An Appointment may have more than one Attendance | Cardinality `Appointment 1:N Attendance` |
-| **V07** | `[ ]` | Attendance must NOT be considered completed merely because Appointment exists | Attendance defaults to `Pendente`; requires manual completion to `Realizado` |
-| **V08** | `[ ]` | Every Procedure attached to an Attendance must have a practiced value | `AttendanceProcedure.practicedValue` non-nullable decimal |
-| **V09** | `[ ]` | Standard procedure value and practiced value must be stored separately | `standardValueSnapshot` and `practicedValue` distinct columns |
-| **V10** | `[ ]` | Difference between standard and practiced values must NOT automatically become an Attendance discount | Zero auto-discount rule; practiced < standard does not alter discount |
-| **V11** | `[ ]` | Attendance discount must be explicit | `Attendance.desconto` manually entered, independent of procedure prices |
+| **V01** | `[x]` | Appointment must belong to exactly one Client | `Appointment.clientId` required foreign key (`tests/tier1_features/f17_appointment_service.spec.ts`) |
+| **V02** | `[x]` | Appointment status must be one of the defined 6 statuses | Valid statuses: Agendado, Confirmado, Concluído, Cancelado, Não compareceu, Reagendado (`tests/tier1_features/f17_appointment_service.spec.ts`) |
+| **V03** | `[x]` | `Em atendimento` must NOT exist as an Appointment status | Explicitly forbidden status (`tests/tier1_features/f17_appointment_service.spec.ts`) |
+| **V04** | `[x]` | Rescheduling preserves old appointment as `Reagendado` and creates a new Appointment | Atomic rescheduling transaction; old attendance cancelled, new attendance created (`tests/tier1_features/f17_appointment_service.spec.ts`, `tests/tier4_workflows/scenarios_a_through_e.spec.ts`) |
+| **V05** | `[x]` | Attendance is distinct from its Appointment | Independent entity, separate lifecycle and ID (`tests/tier1_features/f18_attendance_service.spec.ts`) |
+| **V06** | `[x]` | An Appointment may have more than one Attendance | Cardinality `Appointment 1:N Attendance` (`tests/tier1_features/f18_attendance_service.spec.ts`) |
+| **V07** | `[x]` | Attendance must NOT be considered completed merely because Appointment exists | Attendance defaults to `Pendente`; requires manual completion to `Realizado` (`tests/tier1_features/f18_attendance_service.spec.ts`, `tests/tier2_boundaries/v08_appointment_completion_attendance.spec.ts`) |
+| **V08** | `[x]` | Every Procedure attached to an Attendance must have a practiced value | `AttendanceProcedure.practicedValue` non-nullable decimal (`tests/tier1_features/f18_attendance_service.spec.ts`, `tests/tier2_boundaries/v08_appointment_completion_attendance.spec.ts`) |
+| **V09** | `[x]` | Standard procedure value and practiced value must be stored separately | `standardValueSnapshot` and `practicedValue` distinct columns (`tests/tier2_boundaries/v09_procedure_snapshot_immutability.spec.ts`) |
+| **V10** | `[x]` | Difference between standard and practiced values must NOT automatically become an Attendance discount | Zero auto-discount rule; practiced < standard does not alter discount (`tests/tier1_features/f18_attendance_service.spec.ts`, `tests/tier4_workflows/scenarios_a_through_e.spec.ts`) |
+| **V11** | `[x]` | Attendance discount must be explicit | `Attendance.desconto` manually entered, independent of procedure prices (`tests/tier1_features/f18_attendance_service.spec.ts`, `tests/tier4_workflows/scenarios_a_through_e.spec.ts`) |
 | **V12** | `[x]` | Historical procedure values must NOT change when catalog values change | Catalog price update preserves `standardValueSnapshot` on existing attendances |
 | **V13** | `[x]` | A Client can have multiple emergency contacts | `Client 1:N EmergencyContact` |
 | **V14** | `[x]` | Attachment belongs to Client OR Attendance, never both and never neither | SQL Server CHECK constraint `CK_Attachment_Ownership` (XOR exclusivity) |
-| **V15** | `[ ]` | Specific reusable physical Product unit may be reused by the same Client across Attendances | Reusable unit allows multiple usages if all usages belong to same client |
-| **V16** | `[ ]` | Same physical Product unit must NEVER be used by another Client | Server strictly rejects reusable unit assigned to Client A if used for Client B |
-| **V17** | `[ ]` | Single-use products must NOT be reused | Second consumption of `isReusable = false` unit strictly rejected |
-| **V18** | `[ ]` | Product Usage must identify an individual physical stock unit | `ProductUsage.individualStockUnitId` non-nullable; tracks physical unit |
-| **V19** | `[ ]` | Medical Record is exactly ONE per Attendance | `MedicalRecord.attendanceId` unique constraint (1:1) |
+| **V15** | `[x]` | Specific reusable physical Product unit may be reused by the same Client across Attendances | Reusable unit allows multiple usages if all usages belong to same client (`tests/tier2_boundaries/v15_expired_lot_prevention.spec.ts`, `tests/tier2_boundaries/v16_v17_reusable_cross_client_prevention.spec.ts`) |
+| **V16** | `[x]` | Same physical Product unit must NEVER be used by another Client | Server strictly rejects reusable unit assigned to Client A if used for Client B (`tests/tier2_boundaries/v16_v17_reusable_cross_client_prevention.spec.ts`) |
+| **V17** | `[x]` | Single-use products must NOT be reused | Second consumption of `isReusable = false` unit strictly rejected (`tests/tier2_boundaries/v16_v17_reusable_cross_client_prevention.spec.ts`) |
+| **V18** | `[x]` | Product Usage must identify an individual physical stock unit | `ProductUsage.individualStockUnitId` non-nullable; tracks physical unit (`tests/tier2_boundaries/v18_single_use_unit_prevention.spec.ts`) |
+| **V19** | `[x]` | Medical Record is exactly ONE per Attendance | `MedicalRecord.attendanceId` unique constraint (1:1) (`tests/tier2_boundaries/v19_medical_record_unique_attendance.spec.ts`) |
 | **V20** | `[ ]` | Attendance may have multiple payments | `Attendance 1:N Payment` supporting partial payments across methods |
 | **V21** | `[ ]` | Credit-card installments do NOT generate collection reminders | Credit card stores installment count ($1..12$) with zero reminder creation |
 | **V22** | `[ ]` | PIX installment schedules may generate reminders | PIX installment plan creates scheduled reminders matching due dates |
@@ -654,10 +661,10 @@ The following 6 areas require substantial domain reasoning, complex relational c
 
 | Scenario | Status | Description | Key Assertions |
 |---|---|---|---|
-| **Scenario A** | `[ ]` | Practiced Value Lower than Standard Value | Procedure standard R$500, practiced R$400. Discount remains R$0,00. Total is R$400,00. |
-| **Scenario B** | `[ ]` | Explicit Attendance Discount | Two procedures practiced total R$800. Explicit discount R$100. Total is R$700,00. |
-| **Scenario C** | `[ ]` | Reusable Unit Reused for Same Client; Cross-Client Rejected | Unit used for Client A in Attendance 1 & 2 succeeds. Attempt to use for Client B fails with Portuguese error. |
-| **Scenario D** | `[ ]` | Rescheduled Appointment Workflow | Original appointment becomes `Reagendado`, old attendance becomes `Cancelado`. New appointment & attendance created. |
+| **Scenario A** | `[x]` | Practiced Value Lower than Standard Value | Procedure standard R$500, practiced R$400. Discount remains R$0,00. Total is R$400,00. (`tests/tier4_workflows/scenarios_a_through_e.spec.ts`) |
+| **Scenario B** | `[x]` | Explicit Attendance Discount | Two procedures practiced total R$800. Explicit discount R$100. Total is R$700,00. (`tests/tier4_workflows/scenarios_a_through_e.spec.ts`) |
+| **Scenario C** | `[x]` | Reusable Unit Reused for Same Client; Cross-Client Rejected | Unit used for Client A in Attendance 1 & 2 succeeds. Attempt to use for Client B fails with Portuguese error. (`tests/tier4_workflows/scenarios_a_through_e.spec.ts`, `tests/tier2_boundaries/v16_v17_reusable_cross_client_prevention.spec.ts`) |
+| **Scenario D** | `[x]` | Rescheduled Appointment Workflow | Original appointment becomes `Reagendado`, old attendance becomes `Cancelado`. New appointment & attendance created. (`tests/tier4_workflows/scenarios_a_through_e.spec.ts`, `tests/tier1_features/f17_appointment_service.spec.ts`) |
 | **Scenario E** | `[ ]` | Multiple Payment Methods & Installments | Total R$1.000. R$400 paid via Credit Card (2x, 0 reminders). R$600 scheduled in 3x PIX (3 reminders). Outstanding updates accurately. |
 
 ---
@@ -677,6 +684,14 @@ The following 6 areas require substantial domain reasoning, complex relational c
   - Authentically fixed `ClientService.createClient` to preserve caller-supplied array order of emergency contacts.
   - Successfully ran full automated test suite: 15 test files, 89 tests passing with 0 failures (100% pass rate).
   - Audited checklist: downgraded premature `[x]` marks for Phases 5, 8, and 11 to `[~]` since UI screens are pending; marked Phase 2 migration deploy as `[x]`.
+- **2026-10-15** — Milestone 3 (Phases 6, 7, 9, 10, 15 backend) completed by Worker M3 1:
+  - Implemented domain types and DTOs: `src/types/appointment.ts` (canonical 6 statuses, prohibited `Em atendimento`), `src/types/attendance.ts` (`Pendente`, `Realizado`, `Cancelado`, `AttendanceFinancialsDto`), `src/types/product.ts` (`Disponivel`, `EmUso`, `Esgotado`, `Descartado`, Product, Lot, StockUnit DTOs), `src/types/medical-record.ts`.
+  - Implemented Zod validation schemas: `src/schemas/appointment.ts`, `src/schemas/attendance.ts`, `src/schemas/product.ts`, `src/schemas/medical-record.ts` (with pt-BR clinical aliases).
+  - Implemented domain services: `AppointmentService` (D1, V03, V08 completion guard, D3 planned procedures, atomic rescheduling cascade), `AttendanceService` (D1 lifecycle, snapshot preservation V09, explicit practiced values V08, explicit discounts V11, D2 dynamic financials), `ProductService` (catalog CRUD, procedure associations, low stock threshold), `StockService` (lot intake with automatic physical unit generation, serial uniqueness, available unit querying, usage validation enforcing V15 expired lot block, V18 single-use second use block, V16 same-client reuse, and V17 / AC 59 / AC 66 cross-client block with exact pt-BR error `"Esta unidade de estoque já está vinculada a outro cliente."`), `MedicalRecordService` (strict 1:1 Attendance constraint per V19), `ProcedureService` class wrapper.
+  - Implemented Next.js 15 App Router API handlers with awaited params (`const { id } = await params;`) and iron-session auth: `/api/appointments/*`, `/api/attendances/*`, `/api/products/*`, `/api/lots/*`, `/api/stock/units/*`, `/api/clients/[id]/history`.
+  - Authored comprehensive automated test suites: Tier 1 Feature tests (f17, f18, f20, f21, f22), Tier 2 Boundary tests (v08, v09, v15, v16_v17, v18, v19), Tier 3 Combination test (`m3_clinical_workflow_e2e.spec.ts`).
+  - Total test suite expanded from 15 files / 89 tests to 30 test files / 185 tests, 100% passing against live LocalDB `PopoAppTest`.
+  - Clean `npm run lint` (0 errors) and clean `npm run build` (all routes compiled cleanly).
 
 ---
 

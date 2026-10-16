@@ -36,3 +36,4 @@ temp/
 
 # Sequelize
 sequelize-meta.json
+tsconfig.tsbuildinfo

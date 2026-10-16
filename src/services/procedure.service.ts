@@ -423,3 +423,12 @@ export async function getProcedureCategories(): Promise<string[]> {
     .map((c) => c.categoria)
     .filter((c): c is string => c !== null && c.trim().length > 0);
 }
+
+export class ProcedureService {
+  static listProcedures = listProcedures;
+  static getProcedureById = getProcedureById;
+  static createProcedure = createProcedure;
+  static updateProcedure = updateProcedure;
+  static deleteProcedure = deleteProcedure;
+  static getProcedureCategories = getProcedureCategories;
+}
