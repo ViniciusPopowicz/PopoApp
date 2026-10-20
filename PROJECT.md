@@ -40,15 +40,15 @@ The architecture enforces strict layered boundaries:
 | F25 | Payment Processing Service & Installments | Register payments, support payment methods, card installments (stored count, zero reminders) | Completed | Dev Spec §21–§24 / §32 (V21, V22) |
 | F26 | In-App Reminder Service | In-app reminders, dashboard feed, manual resolution toggle; no external delivery | Completed | D5 / Dev Spec §25 / §32 (V23, V24) |
 | F27 | Dashboard Metrics & Aggregation Engine | Aggregates daily/weekly/monthly revenue, attendance counts, low stock alerts, pending reminders | Completed | Dev Spec §26 |
-| F28 | Comprehensive Clinical Seed Data | Seed script creating full clinical workflow covering Examples A–E | M5 | Dev Spec §50 |
-| F29 | pt-BR Client UI (List, Create, Edit, [id] Detail) | Client screens with Brazilian Portuguese text, CPF mask/validation, emergency contacts, history tabs | M5 | R4 / Dev Spec §28 |
-| F30 | pt-BR Agenda UI (Day/Week/Month, Scheduling) | Calendar view, appointment modals, 6 status badges, D1 transitions | M5 | R4 / Dev Spec §28 |
-| F31 | pt-BR Attendance UI & [id] Clinical Workspace | Attendance execution workspace: procedures, stock usage, clinical notes, financial breakdown | M5 | R4 / Dev Spec §28 |
-| F32 | pt-BR Procedure Catalog UI | Procedure listing, pricing modal, category filters | M5 | R4 / Dev Spec §28 |
-| F33 | pt-BR Product & Stock UI | Product catalog, lot intake, unit barcode/identifier list, usage history | M5 | R4 / Dev Spec §28 |
-| F34 | pt-BR Financial Dashboard & Payments UI | Accounts receivable, payment registration modal, installment breakdown, cash flow | M5 | R4 / Dev Spec §28 |
-| F35 | pt-BR Reminders UI & Dashboard Widget | Reminders page with status toggles, dashboard alert widget | M5 | R4 / Dev Spec §28 |
-| F36 | pt-BR Navigation, Layout & Error Feedback | Header, sidebar, toasts, error messages in Portuguese | M5 | R4 / Dev Spec §28 |
+| F28 | Comprehensive Clinical Seed Data | Seed script creating full clinical workflow covering Examples A–E | Completed in M5 | Dev Spec §50 |
+| F29 | pt-BR Client UI (List, Create, Edit, [id] Detail) | Client screens with Brazilian Portuguese text, CPF mask/validation, emergency contacts, history tabs | Completed in M5 | R4 / Dev Spec §28 |
+| F30 | pt-BR Agenda UI (Day/Week/Month, Scheduling) | Calendar view, appointment modals, 6 status badges, D1 transitions | Completed in M5 | R4 / Dev Spec §28 |
+| F31 | pt-BR Attendance UI & [id] Clinical Workspace | Attendance execution workspace: procedures, stock usage, clinical notes, financial breakdown | Completed in M5 | R4 / Dev Spec §28 |
+| F32 | pt-BR Procedure Catalog UI | Procedure listing, pricing modal, category filters | Completed in M5 | R4 / Dev Spec §28 |
+| F33 | pt-BR Product & Stock UI | Product catalog, lot intake, unit barcode/identifier list, usage history | Completed in M5 | R4 / Dev Spec §28 |
+| F34 | pt-BR Financial Dashboard & Payments UI | Accounts receivable, payment registration modal, installment breakdown, cash flow | Completed in M5 | R4 / Dev Spec §28 |
+| F35 | pt-BR Reminders UI & Dashboard Widget | Reminders page with status toggles, dashboard alert widget | Completed in M5 | R4 / Dev Spec §28 |
+| F36 | pt-BR Navigation, Layout & Error Feedback | Header, sidebar, toasts, error messages in Portuguese | Completed in M5 | R4 / Dev Spec §28 |
 | F37 | Test Runner Infrastructure Setup | Vitest installed, `.env.test` configured for `PopoAppTest`, test DB helper scripts | Test Track | D7 / Dev Spec §49 |
 | F38 | Tier 1: Feature Coverage Test Suite | >=5 tests per core feature across all domain entities | Test Track | Project Pattern Tier 1 |
 | F39 | Tier 2: Boundary & Corner Cases Test Suite | Tests for CPF edges, decimal precisions, stock boundaries, attachment XOR constraint AC 61 | Test Track | Project Pattern Tier 2 |
@@ -62,25 +62,25 @@ The architecture enforces strict layered boundaries:
 | M1 | Foundation, Tooling & Database Schema | Phases 1 & 2: ESLint, Vitest, 18 Prisma domain models, SQL Server LocalDB migrations, Attachment XOR CHECK constraint | none | COMPLETED (commit `dc33eb9`) |
 | M2 | Security, Core Entities & Catalog | Phases 3, 4, 5, 11: Bcrypt auth, Client service + CPF, Procedure catalog, Authenticated file storage pipeline | M1 | COMPLETED (Gate PASSED, commit `5a17482`) |
 | M3 | Clinical Workflows, Products & Inventory | Phases 6, 7, 9, 10: Appointments (6 statuses), Attendance (D1), Inventory & Unit Traceability (reuse rules), Medical Records | M2 | COMPLETED (Backend verified, test suites pass) |
-| M4 | Financial Engine, Pricing & Reminders | Phases 8, 12, 13, 14: Practiced values, dynamic Total/Outstanding (D2), Payments, Card Installments, In-app reminders, Dashboard metrics | M3 | COMPLETED (Gate PASSED, 42 test files / 289 tests) |
-| M5 | Brazilian Portuguese UI Integration & Seed Data | Phases 15 & 16: Seed script (Examples A–E), complete pt-BR UI screens, client detail [id], attendance workspace [id], real API integration | M4 | IN_PROGRESS |
-| M6 | Validation Engine & E2E Testing Verification | Phase 17: Implementation track passes 100% of E2E test suite (Tiers 1–4) + Tier 5 Adversarial Coverage Hardening | M5, TEST_READY | PLANNED |
+| M4 | Financial Engine, Pricing & Reminders | Phases 8, 12, 13, 14: Practiced values, dynamic Total/Outstanding (D2), Payments, Card Installments, In-app reminders, Dashboard metrics | M3 | COMPLETED (Gate PASSED, commit `76089a7`) |
+| M5 | Brazilian Portuguese UI Integration & Seed Data | Phases 15 & 16: Seed script (Examples A–E), complete pt-BR UI screens, client detail [id], attendance workspace [id], real API integration | M4 | COMPLETED (Gate PASSED, 44 test files / 335 tests passing) |
+| M6 | Validation Engine & E2E Testing Verification | Phase 17: Implementation track passes 100% of E2E test suite (Tiers 1–4) + Tier 5 Adversarial Coverage Hardening | M5, TEST_READY | READY_TO_START (Phase 17) |
 | M7 | Final Completion Audit & Acceptance Verification | Phase 18: Audit against 22 checklist items, 24 critical validations, D1–D7, R1–R5, and final signoff | M6 | PLANNED |
 
 ## Resumption Protocol & Baseline Snapshot
-- **Current Verified Baseline Commit**: `dc33eb9bd4b8086a127e1f016cb7fcae47667a9b`
-- **Database Status**: Microsoft SQL Server LocalDB `MSSQLLocalDB` provisioned with `PopoApp` (dev) and `PopoAppTest` (isolated test). Migration `20261006000000_init_domain_models` applied to both. `CK_Attachment_Ownership` CHECK constraint verified in engine.
+- **Current Verified Baseline**: Milestone 5 Gate unanimously passed (Generation 5).
+- **Database Status**: Microsoft SQL Server LocalDB `MSSQLLocalDB` provisioned with `PopoApp` (dev) and `PopoAppTest` (isolated test). Migration `20261006000000_init_domain_models` applied to both. `CK_Attachment_Ownership` CHECK constraint verified in engine. Development database `PopoApp` fully seeded with clinical data covering §47 Examples A–E.
 - **Protocol Bridge (Dev/Test Only)**: `tests/helpers/localdb-proxy.js` bridges TCP 1433 to LocalDB Named Pipes (`npm run db:proxy`).
-- **Test Baseline**: 15 test files, 89 tests passing (100% pass rate) via `npm test`.
-- **Code Quality**: `npm run lint` (0 errors), `npm run build` (17/17 pages generated cleanly).
+- **Test Baseline**: 44 test files, 335 tests passing (100% pass rate, 0 failures) via `npm test`.
+- **Code Quality**: `npm run lint` (0 errors, 0 warnings), `npm run build` (clean compilation, 26/26 routes generated cleanly).
 - **Quick Resumption Commands**:
   1. `sqllocaldb start MSSQLLocalDB`
   2. `npm run db:proxy` (in background terminal if port 1433 is not already open)
-  3. `npm test` (verify 89 passing tests)
+  3. `npm test` (verify 44 test files passed, 335 passed)
   4. `npm run lint` && `npm run build` (verify clean build)
 - **Next Development Focus**:
-  - **Option A (Milestone 2 UI)**: Replace mock data in `src/app/(authenticated)/clientes/page.tsx`, create `/clientes/[id]` clinical detail page, replace mock data in `src/app/(authenticated)/procedimentos/page.tsx`, add attachment upload/gallery components.
-  - **Option B (Milestone 3 Clinical Domain)**: Implement `AppointmentService` (6 statuses, rescheduling cascade per D1), `AttendanceService` (D1 state machine, procedure pricing per D2), `ProductService` (stock unit traceability, reusable vs single-use rules V16–V18), `MedicalRecordService` (1:1 with Attendance).
+  - **Milestone 6 (Validation Engine & E2E Testing Verification — Phase 17)**: Execute complete end-to-end browser workflows in Playwright/browser testing against running application, covering Tiers 1–4 and Tier 5 adversarial verification.
+  - **Milestone 7 (Final Completion Audit & Acceptance Verification — Phase 18)**: Audit against 22 checklist items, 24 critical business validations, D1–D7, R1–R5, and final signoff.
 
 
 

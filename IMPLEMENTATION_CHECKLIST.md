@@ -14,48 +14,38 @@
 - **Database Engine**: Microsoft SQL Server LocalDB (`provider = "sqlserver"`)
   - Development DB: `PopoApp`
   - Automated Testing DB: `PopoAppTest` (isolated per D7)
-- **Active Milestone**: Milestone 5 (Comprehensive Clinical Seed Data & pt-BR UI Integration — Phases 15 & 16)
-- **Overall Progress**: Milestone 4 complete (Gate PASSED, 42 test files / 289 tests passing, lint/build clean); Milestone 5 active.
+- **Active Milestone**: Milestone 5 PASSED UNANIMOUSLY; Milestone 6 (Phase 17: Validation Engine & E2E Testing Verification) READY TO RESUME.
+- **Overall Progress**: Milestone 5 complete (Gate PASSED, 44 test files / 335 tests passing, lint/build clean); ready for Milestone 6.
 - **Phase Breakdown**:
-  - Completed (`[x]`): 2 (Phase 1: Foundation, Phase 4: Auth & Security)
-  - In Progress (`[~]`): 12 (Phases 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
-  - Not Started (`[ ]`): 4 (Phases 16 through 18)
+  - Completed (`[x]`): 7 (Phases 1, 4, 12, 13, 14, 15, 16)
+  - In Progress (`[~]`): 9 (Phases 2, 3, 5, 6, 7, 8, 9, 10, 11)
+  - Not Started (`[ ]`): 2 (Phases 17, 18)
   - Blocked (`[!]`): 0
   - Needs Decision (`[?]`): 0
-- **Automated Test Coverage**: Vitest runner and .env.test configured for PopoAppTest; 42 test files, 289 tests passing (100%) against live LocalDB PopoAppTest with single-fork pool execution
-- **Mock Data Status**: 8 mock data files present in `src/data/mock/*`; all authenticated pages currently reference mock data and will be migrated to real services in Phase 16 (R4).
+- **Automated Test Coverage**: 44 test files, 335 tests passing (100% pass rate, 0 failures) against isolated `PopoAppTest`.
+- **Mock Data Status**: 0 occurrences of `@/data/mock` across all authenticated pages and components. Mock files dormant/unused.
 
 ---
 
 ## 2. Current Work
 
-- **Phase**: Milestone 5 — Comprehensive Clinical Seed Data & pt-BR UI Integration (Phases 15 & 16)
-- **Current Task**: Milestone 4 Gate unanimously approved (42 test files, 289 tests passing, lint/build clean). Commenced Milestone 5: implementing comprehensive clinical seed script (prisma/seed.ts — Phase 15, F28) covering §47 Examples A–E and §50.
-- **Status**: Milestone 4 [x] COMPLETED (Gate PASSED). Milestone 5 [~] IN_PROGRESS
+- **Phase**: Milestone 5 PASSED UNANIMOUSLY; Milestone 6 (Phase 17: Validation Engine & E2E Testing Verification) READY TO RESUME.
+- **Current Task**: Milestone 5 Gate unanimously approved by 5 independent subagents (`reviewer_m5_1`, `reviewer_m5_2`, `challenger_m5_1`, `challenger_m5_2`, `auditor_m5_1`). Full clinical seed (`prisma/seed.ts`) and complete pt-BR UI across all 26 routes verified with zero mock imports. Stopping point recorded per pause directive.
+- **Status**: Milestone 5 [x] COMPLETED (Gate PASSED). Milestone 6 [ ] READY_TO_START.
 - **Completed**:
-  - **Phase 1 (Tooling & Foundation)**: Vitest installed and configured with `vitest.config.ts`, .env.test isolation, LocalDB proxy helper, ESLint config.
-  - **Phase 2 (Database & Schema)**: 18 Prisma domain models, migration deployed to `PopoApp` and `PopoAppTest`, `CK_Attachment_Ownership` CHECK constraint verified in SQL Server LocalDB engine.
-  - **Phase 3 (Auth & Session)**: Implemented `src/services/auth.service.ts` with real Prisma user lookup and `bcrypt.compare`; hardened `src/middleware.ts` to return JSON 401 for unauthenticated `/api/*` requests per AC 60.
-  - **Phase 4 (Authentication and Security)**: Real bcrypt auth, route protection, authenticated file streaming (`/api/attachments/[id]`), MIME validation.
-  - **Phase 5 (Client Management - Backend)**: Implemented `src/lib/cpf.ts` (MOD 11, repeated digit checks, normalization and masking), `src/schemas/client.ts` with Zod, `src/services/client.service.ts` with unique CPF handling (P2002 conflict handling per AC 62, V01, V02), 1:N emergency contacts (V13) with input order preservation, soft-deactivation toggle (`ativo`/`inativo` per V05), and real derived history. Implemented `/api/clients`, `/api/clients/[id]`, `/api/clients/[id]/contacts`, and `/api/clients/[id]/contacts/[contactId]`.
-  - **Phase 6 (Appointments - Backend)**: Implemented `src/types/appointment.ts`, `src/schemas/appointment.ts`, `src/services/appointment.service.ts` (6 valid statuses, prohibited `Em atendimento` per V03, auto-create `Pendente` attendance per D1/V07, atomic reschedule cascade with `rescheduledFromId`/`rescheduledToId` per D1/V04, cancel and no-show cascades, completion guard requiring completed attendance per V08, planned procedures per D3). Implemented route handlers: `/api/appointments`, `/api/appointments/[id]`, `/api/appointments/[id]/confirm`, `/api/appointments/[id]/cancel`, `/api/appointments/[id]/no-show`, `/api/appointments/[id]/reschedule`, `/api/appointments/[id]/complete`, `/api/appointments/[id]/status`.
-  - **Phase 7 (Attendances - Backend)**: Implemented `src/types/attendance.ts`, `src/schemas/attendance.ts`, `src/services/attendance.service.ts` (D1 state machine `Pendente`/`Realizado`/`Cancelado`, procedure snapshot imutability `standardValueSnapshot` per V09/V12/V24, explicit practiced value `practicedValue` per V08, explicit discount validation per V11, dynamic D2 financial calculation). Implemented route handlers: `/api/attendances`, `/api/attendances/[id]`, `/api/attendances/[id]/status`, `/api/attendances/[id]/complete`, `/api/attendances/[id]/cancel`, `/api/attendances/[id]/procedures`, `/api/attendances/[id]/procedures/[procId]`, `/api/attendances/[id]/prefill`, `/api/attendances/[id]/discount`, `/api/attendances/[id]/usages`, `/api/attendances/[id]/record`.
-  - **Phase 8 (Procedure Catalog - Backend)**: Implemented `src/types/procedure.ts`, `src/schemas/procedure.ts` (positive standard value `valorPadrao > 0` per V06, mandatory fields per V07), `src/services/procedure.service.ts` with soft deactivation fallback on relational usage, and API routes `/api/procedures` and `/api/procedures/[id]`.
-  - **Phase 9 (Products and Inventory - Backend)**: Implemented `src/types/product.ts`, `src/schemas/product.ts`, `src/services/product.service.ts` (catalog CRUD, procedure associations, low stock calculation), `src/services/stock.service.ts` (batch lot intake with automatic physical `StockUnit` generation, serial uniqueness, available unit querying excluding expired lots per V15, `recordProductUsage` enforcing expired lot block per V15, single-use second use block per V18, same-client reuse per V16, and cross-client block with Portuguese error per V17, AC 59, AC 66). Implemented route handlers: `/api/products`, `/api/products/[id]`, `/api/products/[id]/lots`, `/api/lots/[id]`, `/api/lots/[id]/units`, `/api/stock/units`, `/api/stock/units/[id]`.
-  - **Phase 10 (Medical Records - Backend)**: Implemented `src/types/medical-record.ts`, `src/schemas/medical-record.ts` (canonical fields + clinical aliases `anamnese`, `evolucaoClinica`, `orientacoesPosProcedimento`, `intercorrencias`), `src/services/medical-record.service.ts` enforcing strict 1:1 relationship with Attendance per V19. Route handler: `/api/attendances/[id]/record`.
-  - **Phase 11 (Authenticated File Storage - Backend)**: Implemented `src/services/attachment.service.ts` with local disk storage outside web root (`./storage/uploads`), UUID filenames, MIME allowlist (JPEG, PNG, WebP, PDF per V12), 10MB limit (V13), Client XOR Attendance exclusivity (V14, AC 61), and atomic profile photo replacement. Implemented `/api/attachments`, `/api/attachments/[id]` (secure streaming with 401 unauth check, `nosniff`, private cache), and `/api/clients/[id]/photo`.
-  - **Phase 15 (Client History Endpoint - Backend)**: Implemented `/api/clients/[id]/history` aggregating full chronological clinical and financial timeline.
-  - **Testing**: 30 test files, 185 tests passing cleanly against live LocalDB database `PopoAppTest` (0 failures).
+  - **Milestone 1 (Tooling, Foundation & Database Schema)**: 18 Prisma domain models, migration applied to LocalDB `PopoApp` and `PopoAppTest`, `CK_Attachment_Ownership` CHECK constraint verified in SQL Server engine.
+  - **Milestone 2 (Security, Core Entities, Catalog & Storage)**: Real bcrypt auth, route protection, authenticated file streaming (`/api/attachments/[id]`), MIME validation, ClientService (CPF MOD 11), ProcedureService.
+  - **Milestone 3 (Clinical Workflows, Products & Inventory)**: AppointmentService (6 statuses, atomic rescheduling cascade), AttendanceService (D1 state machine), StockService (unit traceability, reusable same-client reuse, cross-client block, single-use rules), MedicalRecordService (strict 1:1).
+  - **Milestone 4 (Financial Engine, Payments, Reminders & Dashboard)**: PaymentService (multi-method, credit card installments with zero reminders, PIX installment schedules), ReminderService (in-app reminders, financial decoupling), DashboardService (metrics, ledger, cash flow). Gate approved in commit `76089a7`.
+  - **Milestone 5 Part 1 (Comprehensive Clinical Seed — Phase 15, F28)**: Implemented idempotent `prisma/seed.ts` seeding 6 users, 10 clients, 8 procedures, 6 products, 9 lots, 29 stock units, 13 appointments, 13 attendances, 19 attendance procedures, 8 medical records, 13 product usages, 11 attachments, 13 payments, 6 PIX installments, and 12 reminders covering spec §47 Examples A–E.
+  - **Milestone 5 Part 2 (Complete pt-BR UI Integration — Phase 16, F29–F36)**: Complete elimination of mock data across all 26 routes (0 `@/data/mock` imports in authenticated pages/components). Built full pt-BR clinical UI: `/clientes` & `/clientes/[id]` (CPF masking, emergency contacts, history timeline tabs), `/agenda` (Day/Week/Month views, appointment modals, D1 transitions), `/atendimentos` & `/atendimentos/[id]` (Clinical Workspace: procedure pricing D2, stock unit selector, prontuário, attachment gallery, payment modal), `/procedimentos` (catalog CRUD), `/produtos` (catalog, lot intake, unit barcode list, usage history), `/financeiro` (ledger, revenue cards, cash flow, receivable list), `/lembretes` (status filters, PIX reminders), `/` (dashboard widgets).
+  - **Milestone 5 Gate Evaluation**: Unanimous PASS by 5 subagents (`reviewer_m5_1`, `reviewer_m5_2`, `challenger_m5_1` with 28 tests, `challenger_m5_2` with 18 tests, `auditor_m5_1` CLEAN).
+  - **Testing**: 44 test files, 335 tests passing cleanly against live LocalDB database `PopoAppTest` (100% pass rate, 0 failures). Lint clean (0 errors/warnings), production build clean (26/26 routes).
 - **Remaining**:
-  - UI screens for Milestone 2 & Milestone 3 (all UI items remain `[ ]` until Phase 16):
-    - Client UI (`/clientes`, `/clientes/[id]`)
-    - Agenda Calendar UI (`/agenda`)
-    - Attendance Clinical Workspace UI (`/atendimentos`, `/atendimentos/[id]`)
-    - Procedure Catalog UI (`/procedimentos`)
-    - Product and Stock Traceability UI (`/produtos`)
-  - Milestone 4: Financial Ledger, Payments & Reminders (Phases 12, 13, 14).
+  - **Phase 17 (Milestone 6: E2E Browser Testing & Adversarial Hardening)**: Automated browser workflow verification in Playwright/browser testing against running application, covering Tiers 1–4 and Tier 5 adversarial verification.
+  - **Phase 18 (Milestone 7: Final Completion Audit & Acceptance Verification)**: Audit against 22 checklist items, 24 critical business validations, D1–D7, R1–R5, and final signoff.
 - **Immediate Next Action**:
-  - Proceed with Milestone 4 (Financial Ledger, Payments & Reminders - Phases 12, 13, 14) or build UI components for Milestones 2 & 3 in Phase 16.
+  - Resume with Milestone 6 (Phase 17: Validation Engine & E2E Testing Verification).
 - **Blockers**: None.
 - **Pending Decisions**: None (Binding decisions D1–D7 established).
 
@@ -77,17 +67,17 @@ When resuming development, execute these steps in order:
 3. **Verify Baseline Tests**:
    ```powershell
    npm test
-   # Expected: 30 test files passed, 185 passed (0 failures)
+   # Expected: 44 test files passed, 335 passed (0 failures)
    ```
 4. **Verify Build & Lint**:
    ```powershell
    npm run lint
    npm run build
-   # Expected: zero lint errors, 17/17 pages generated cleanly
+   # Expected: zero lint errors, 26/26 pages generated cleanly
    ```
 5. **Resume Implementation Priority**:
-   - Option A (Milestone 2 UI): Implement real UI screens for Client Management (`/clientes` & `/clientes/[id]`), Procedure Catalog (`/procedimentos`), and Attachment gallery, replacing mock imports in those views.
-   - Option B (Milestone 3 Core Services): Implement `AppointmentService` (6 statuses, rescheduling cascade, cancel reasons) and `AttendanceService` (D1 state machine, procedure pricing, discount application).
+   - Milestone 6 (Phase 17): E2E Browser Testing & Adversarial Hardening.
+   - Milestone 7 (Phase 18): Final Completion Audit & Acceptance Verification.
 
 ---
 
@@ -106,12 +96,12 @@ When resuming development, execute these steps in order:
 | **Phase 9** | Products and Inventory | 🔴 **HIGH COMPLEXITY** | `[~]` | Product catalog, lots, physical units, same-client reuse, cross-client prohibition, single-use restrictions, API routes done; UI pending. |
 | **Phase 10** | Medical Records | Standard | `[~]` | Prontuário 1:1 with Attendance, clinical documentation fields, client history integration, API routes done; UI pending. |
 | **Phase 11** | Attachments | 🔴 **HIGH COMPLEXITY** | `[~]` | Storage outside `public/`, Client XOR Attendance exclusivity, secure streaming API done; UI components pending. |
-| **Phase 12** | Payments and Installments | 🔴 **HIGH COMPLEXITY** | [~] | Multi-method payments, partial payments, credit card installments (0 reminders), PIX installment schedule; backend verified, UI in Phase 16. |
-| **Phase 13** | Reminders | 🔴 **HIGH COMPLEXITY** | [~] | In-app reminders for PIX installments, dashboard widget, mark done/dismissed decoupled from payments; backend verified, UI in Phase 16. |
-| **Phase 14** | Financial Features | Standard | [~] | Attendance financial summary, dynamic Total/Outstanding calculation (D2), financial ledger dashboard; backend verified, UI in Phase 16. |
-| **Phase 15** | Client History | Standard | `[~]` | Chronological history API route `/api/clients/[id]/history` derived from real records; UI pending. |
-| **Phase 16** | Frontend / UX | Standard | `[ ]` | Zero mock imports, Brazilian Portuguese text, responsive design, dialogs, loading/empty/error states. |
-| **Phase 17** | Validation and Testing | Standard | `[ ]` | Automated suite (Tiers 1–4), 24 critical validations tested, Scenarios A–E tested on `PopoAppTest`. |
+| **Phase 12** | Payments and Installments | 🔴 **HIGH COMPLEXITY** | `[x]` | Multi-method payments, partial payments, credit card installments (0 reminders), PIX installment schedule; backend & UI complete. |
+| **Phase 13** | Reminders | 🔴 **HIGH COMPLEXITY** | `[x]` | In-app reminders for PIX installments, dashboard widget, mark done/dismissed decoupled from payments; backend & UI complete. |
+| **Phase 14** | Financial Features | Standard | `[x]` | Attendance financial summary, dynamic Total/Outstanding calculation (D2), financial ledger dashboard; backend & UI complete. |
+| **Phase 15** | Client History | Standard | `[x]` | Chronological history API route `/api/clients/[id]/history`, clinical seed script (`prisma/seed.ts` Examples A–E), and client detail history tabs complete. |
+| **Phase 16** | Frontend / UX | Standard | `[x]` | Zero mock imports (0 occurrences across all 26 routes), complete Brazilian Portuguese copy, client detail [id], attendance workspace [id], real API integration. |
+| **Phase 17** | Validation and Testing | Standard | `[ ]` | Automated suite (Tiers 1–4, 44 test files / 335 tests passing), 24 critical validations tested, E2E browser testing ready to start. |
 | **Phase 18** | Final Review and Stabilization | Standard | `[ ]` | Specification audit, database audit, code audit, 22 final review items verified, zero false completions. |
 
 ---
@@ -163,7 +153,7 @@ When resuming development, execute these steps in order:
   - `[x]` Remediate referential integrity actions (explicit `onDelete: NoAction, onUpdate: NoAction` on diamond convergence paths) in `schema.prisma` and `migration.sql` to eliminate P1012 and SQL Server Msg 1785
   - `[x]` Generate and synchronize migration script `20261006000000_init_domain_models/migration.sql` with all 18 tables, indexes, constraints, and `CK_Attachment_Ownership`
   - `[x]` Apply migration and generate Prisma Client against SQL Server LocalDB
-  - `[ ]` Develop clinical seed script (`prisma/seed.ts`) implementing test cases and Scenarios A–E (§50, §47)
+  - `[x]` Develop clinical seed script (`prisma/seed.ts`) implementing test cases and Scenarios A–E (§50, §47)
 
 ---
 
@@ -292,55 +282,55 @@ When resuming development, execute these steps in order:
 
 ---
 
-### Phase 12 — Payments and Installments `[~]` 🔴 HIGH COMPLEXITY
-- [x] 🔴 HIGH COMPLEXITY — Multi-method payments, partial payments, credit card installments, and PIX schedules (backend complete & verified)
+### Phase 12 — Payments and Installments `[x]` 🔴 HIGH COMPLEXITY
+- [x] 🔴 HIGH COMPLEXITY — Multi-method payments, partial payments, credit card installments, and PIX schedules (backend & UI complete)
   - `[x]` Implement `/api/attendances/[id]/payments` API route (GET list, POST record payment)
   - `[x]` Implement credit card payment handling with stored installment count (1..12) and zero reminder generation (D5)
   - `[x]` Implement PIX installment schedule creation endpoint generating installment plan with due dates and amounts
   - `[x]` Implement dynamic computation of total and outstanding balance for attendance (D2)
-  - `[ ]` Build payment registration modal inside attendance workspace supporting partial payments and multiple methods
-  - `[ ]` Build credit card installment selector and PIX installment schedule form
-  - `[ ]` Build payment summary component displaying total, paid, and outstanding balance in real time
+  - `[x]` Build payment registration modal inside attendance workspace supporting partial payments and multiple methods
+  - `[x]` Build credit card installment selector and PIX installment schedule form
+  - `[x]` Build payment summary component displaying total, paid, and outstanding balance in real time
 
 ---
 
-### Phase 13 — Reminders `[~]` 🔴 HIGH COMPLEXITY
-- [x] 🔴 HIGH COMPLEXITY — In-app reminder engine for PIX installments with financial decoupling (backend complete & verified)
+### Phase 13 — Reminders `[x]` 🔴 HIGH COMPLEXITY
+- [x] 🔴 HIGH COMPLEXITY — In-app reminder engine for PIX installments with financial decoupling (backend & UI complete)
   - `[x]` Implement reminder generation service triggered by PIX installment schedule creation
   - `[x]` Implement `/api/reminders` API route (GET list with status filter, POST manual reminder)
   - `[x]` Implement `/api/reminders/[id]/status` API route (PATCH mark `concluido` or `dispensado`)
   - `[x]` Enforce decoupling rule: marking reminder complete/dismissed never alters payment status or outstanding balance
-  - `[ ]` Build reminders management page (`/lembretes`) with tabs for pending, completed, and dismissed
-  - `[ ]` Build dashboard upcoming and overdue PIX reminders widget
-  - `[ ]` Replace mock data imports in `src/app/(authenticated)/lembretes/page.tsx`
+  - `[x]` Build reminders management page (`/lembretes`) with tabs for pending, completed, and dismissed
+  - `[x]` Build dashboard upcoming and overdue PIX reminders widget
+  - `[x]` Replace mock data imports in `src/app/(authenticated)/lembretes/page.tsx`
 
 ---
 
-### Phase 14 — Financial Features `[~]`
+### Phase 14 — Financial Features `[x]`
 - `[x]` Implement `/api/financial/summary` API route (aggregate totals, receivables, paid amounts, payment method breakdowns)
 - `[x]` Implement `/api/financial/transactions` API route (paginated ledger of all attendance payments)
-- `[ ]` Build financial dashboard UI (`/financeiro`) with revenue cards, cash flow charts, and accounts receivable list
-- `[ ]` Implement period filters (today, current week, current month, custom range)
-- `[ ]` Replace mock data imports in `src/app/(authenticated)/financeiro/page.tsx`
+- `[x]` Build financial dashboard UI (`/financeiro`) with revenue cards, cash flow charts, and accounts receivable list
+- `[x]` Implement period filters (today, current week, current month, custom range)
+- `[x]` Replace mock data imports in `src/app/(authenticated)/financeiro/page.tsx`
 
 ---
 
-### Phase 15 — Client History `[~]`
+### Phase 15 — Client History `[x]`
 - `[x]` Implement `/api/clients/[id]/history` API route aggregating real records into chronological timeline
 - `[x]` Ensure history aggregates: Appointments, Attendances, Performed Procedures, Product Usages, Prontuários, Payments, and Attachments
 - `[x]` Verify no artificial `ClientHistory` table exists (derived strictly from domain records)
-- `[ ]` Build tabbed and chronological history timeline components inside `/clientes/[id]`
+- `[x]` Build tabbed and chronological history timeline components inside `/clientes/[id]`
 
 ---
 
-### Phase 16 — Frontend / UX `[ ]`
-- `[ ]` Remove all references to `src/data/mock/*` from all pages and components
-- `[ ]` Verify all user-facing copy, headers, labels, buttons, and placeholders are in natural Brazilian Portuguese (pt-BR)
-- `[ ]` Update `src/i18n/pt-BR.ts` with all domain terms and status labels (`Reagendado`, `Realizado`, etc.)
-- `[ ]` Ensure proper Brazilian currency (BRL `R$ 0,00`) and date (`dd/MM/yyyy`) formatting throughout UI
-- `[ ]` Build empty states, loading skeletons, error boundaries, and toast notifications (`sonner`) across all views
-- `[ ]` Ensure responsive layout compatibility across mobile, tablet, and desktop viewports
-- `[ ]` Wire dashboard shortcuts and real summary statistics in `src/app/(authenticated)/page.tsx`
+### Phase 16 — Frontend / UX `[x]`
+- `[x]` Remove all references to `src/data/mock/*` from all pages and components
+- `[x]` Verify all user-facing copy, headers, labels, buttons, and placeholders are in natural Brazilian Portuguese (pt-BR)
+- `[x]` Update `src/i18n/pt-BR.ts` with all domain terms and status labels (`Reagendado`, `Realizado`, etc.)
+- `[x]` Ensure proper Brazilian currency (BRL `R$ 0,00`) and date (`dd/MM/yyyy`) formatting throughout UI
+- `[x]` Build empty states, loading skeletons, error boundaries, and toast notifications (`sonner`) across all views
+- `[x]` Ensure responsive layout compatibility across mobile, tablet, and desktop viewports
+- `[x]` Wire dashboard shortcuts and real summary statistics in `src/app/(authenticated)/page.tsx`
 
 ---
 
@@ -724,6 +714,12 @@ The following 6 areas require substantial domain reasoning, complex relational c
     - Refactored `tests/tier4_workflows/scenarios_a_through_e.spec.ts` (5 tests) to exercise real domain services.
   - Full automated suite: 40 test files, 257 tests passing with 0 failures (100% pass rate) on LocalDB `PopoAppTest`.
   - Clean `npm run lint` (0 errors) and clean `npm run build`.
+- **2026-10-20** — Milestone 4 Gate unanimously approved (commit `76089a7`). Milestone 5 (Phases 15 & 16) completed and unanimously approved (Gate PASSED):
+  - Phase 15 (Clinical Seed & Client History): Built comprehensive, idempotent clinical seed script (`prisma/seed.ts`) populating all entities and reproducing spec §47 Examples A–E on LocalDB `PopoApp`.
+  - Phase 16 (Complete pt-BR UI Integration): Eliminated 100% of mock data across all 26 routes (0 `@/data/mock` imports in authenticated pages/components). Implemented client detail page `/clientes/[id]` with history tabs, agenda UI `/agenda` with Day/Week/Month views and appointment modals, clinical workspace `/atendimentos/[id]` with procedure pricing (D2), stock unit selector, prontuário, attachments, and payment modal, procedure catalog `/procedimentos`, product & stock management `/produtos`, financial dashboard `/financeiro`, reminders `/lembretes`, and executive dashboard `/`.
+  - Milestone 5 Gate evaluation: Unanimously approved by 5 independent subagents (`reviewer_m5_1`, `reviewer_m5_2`, `challenger_m5_1` with 28 tests in `m5_adversarial_ui_core.spec.ts`, `challenger_m5_2` with 18 tests in `m5_adversarial_clinical_seed.spec.ts`, `auditor_m5_1` CLEAN).
+  - Total automated test suite expanded to 44 test files, 335 tests passing cleanly (100% pass rate, 0 failures) against live LocalDB `PopoAppTest`.
+  - Clean `npm run lint` (0 errors, 0 warnings) and clean `npm run build` (26/26 routes generated cleanly).
 
 ---
 

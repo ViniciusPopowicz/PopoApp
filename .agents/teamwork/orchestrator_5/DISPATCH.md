@@ -30,3 +30,11 @@ Immediate Execution Plan:
 5. Complete **Milestones 6 & 7**: E2E browser verification, adversarial hardening, and Final Completion Audit in `IMPLEMENTATION_CHECKLIST.md`.
 6. Maintain `progress.md` actively (at least every heartbeat/action).
 7. When the entire project is completed and verified, report completion to the Sentinel via send_message to 5f8e597b-0c24-4cbe-92f0-54cb54900574. Do not report completion until all acceptance criteria are met.
+
+## 2026-10-20T02:57:44Z
+PAUSE DIRECTIVE from User / Sentinel:
+The user wants to pause after the currently running Milestone 5 Gate workers finish. Please execute the following protocol:
+1. Let the 5 active Milestone 5 Gate subagents (Reviewers 1 & 2, Challengers 1 & 2, Auditor) finish their current evaluations and record the verdict in `GATE_STATUS.md`. Do NOT dispatch any new work (no Milestone 6/7 workers or remediation rounds) after they finish.
+2. Update `IMPLEMENTATION_CHECKLIST.md` (§2 Current Work & phase statuses) and `RESUME_GUIDE.md` with the exact stopping point, test/build results, and step-by-step instructions to continue later with Milestones 6 & 7.
+3. Commit all work to git so `git status` is clean, then send me a final pause summary (latest commit SHA, M5 gate verdict, test count, and remaining steps) and stop all your subagents and crons.
+

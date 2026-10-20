@@ -436,3 +436,11 @@ Add an automated test suite covering the testing requirements in development spe
 - [ ] Every `[x]` item is backed by code and, where testable, a passing test. Spot-checking 10 random `[x]` items finds no false completion.
 - [ ] Any ambiguity discovered during the work appears as `[?]` with what is needed. The Final Completion Audit (checklist spec §§19–20) is filled in honestly.
 - [ ] A final summary per development spec §53 is reported back: what was implemented, what was tested, what remains, known limitations and unresolved decisions.
+
+
+## Pause Request — 2026-10-20T02:57:27Z
+
+The user wants to pause after the currently running Milestone 5 Gate workers finish. Please relay to Orchestrator Gen 5:
+1. Let the 5 active Milestone 5 Gate subagents (Reviewers 1 & 2, Challengers 1 & 2, Auditor) finish their current evaluations and record the verdict in `GATE_STATUS.md`. Do NOT dispatch any new work (no Milestone 6/7 workers or remediation rounds) after they finish.
+2. Update `IMPLEMENTATION_CHECKLIST.md` (§2 Current Work & phase statuses) and `RESUME_GUIDE.md` with the exact stopping point, test/build results, and step-by-step instructions to continue later with Milestones 6 & 7.
+3. Commit all work to git so `git status` is clean, then send me a final pause summary (latest commit SHA, M5 gate verdict, test count, and remaining steps) and stop all subagents and crons.
