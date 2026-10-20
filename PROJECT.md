@@ -35,11 +35,11 @@ The architecture enforces strict layered boundaries:
 | F20 | Product Inventory & Lot Management Service | Product catalog, lots with expiration dates, stock unit generation | M3 | Dev Spec §13, §14 / §32 (V15) |
 | F21 | Individual Stock Unit Tracking & Usage Service | Same-client reuse of reusable units; cross-client reuse strictly blocked; single-use non-reusable | M3 | Dev Spec §15, §16 / §32 (V16, V17, V18) |
 | F22 | Medical Record (Prontuário) Service | 1:1 creation and retrieval linked to Attendance | M3 | Dev Spec §19 / §32 (V19) |
-| F23 | Attendance Pricing & Financial Service | Practiced value independent of standard value; snapshot standard value; explicit discount | M4 | D2 / Dev Spec §10–§12 / §32 (V10, V11) |
-| F24 | Dynamic Financial Calculations | Total = sum(practicedValue) - discount; Outstanding = Total - sum(paid); dynamic calculation | M4 | D2 / Dev Spec §20 / §32 (V20) |
-| F25 | Payment Processing Service & Installments | Register payments, support payment methods, card installments (stored count, zero reminders) | M4 | Dev Spec §21–§24 / §32 (V21, V22) |
-| F26 | In-App Reminder Service | In-app reminders, dashboard feed, manual resolution toggle; no external delivery | M4 | D5 / Dev Spec §25 / §32 (V23, V24) |
-| F27 | Dashboard Metrics & Aggregation Engine | Aggregates daily/weekly/monthly revenue, attendance counts, low stock alerts, pending reminders | M4 | Dev Spec §26 |
+| F23 | Attendance Pricing & Financial Service | Practiced value independent of standard value; snapshot standard value; explicit discount | Completed | D2 / Dev Spec §10–§12 / §32 (V10, V11) |
+| F24 | Dynamic Financial Calculations | Total = sum(practicedValue) - discount; Outstanding = Total - sum(paid); dynamic calculation | Completed | D2 / Dev Spec §20 / §32 (V20) |
+| F25 | Payment Processing Service & Installments | Register payments, support payment methods, card installments (stored count, zero reminders) | Completed | Dev Spec §21–§24 / §32 (V21, V22) |
+| F26 | In-App Reminder Service | In-app reminders, dashboard feed, manual resolution toggle; no external delivery | Completed | D5 / Dev Spec §25 / §32 (V23, V24) |
+| F27 | Dashboard Metrics & Aggregation Engine | Aggregates daily/weekly/monthly revenue, attendance counts, low stock alerts, pending reminders | Completed | Dev Spec §26 |
 | F28 | Comprehensive Clinical Seed Data | Seed script creating full clinical workflow covering Examples A–E | M5 | Dev Spec §50 |
 | F29 | pt-BR Client UI (List, Create, Edit, [id] Detail) | Client screens with Brazilian Portuguese text, CPF mask/validation, emergency contacts, history tabs | M5 | R4 / Dev Spec §28 |
 | F30 | pt-BR Agenda UI (Day/Week/Month, Scheduling) | Calendar view, appointment modals, 6 status badges, D1 transitions | M5 | R4 / Dev Spec §28 |
@@ -62,8 +62,8 @@ The architecture enforces strict layered boundaries:
 | M1 | Foundation, Tooling & Database Schema | Phases 1 & 2: ESLint, Vitest, 18 Prisma domain models, SQL Server LocalDB migrations, Attachment XOR CHECK constraint | none | COMPLETED (commit `dc33eb9`) |
 | M2 | Security, Core Entities & Catalog | Phases 3, 4, 5, 11: Bcrypt auth, Client service + CPF, Procedure catalog, Authenticated file storage pipeline | M1 | COMPLETED (Gate PASSED, commit `5a17482`) |
 | M3 | Clinical Workflows, Products & Inventory | Phases 6, 7, 9, 10: Appointments (6 statuses), Attendance (D1), Inventory & Unit Traceability (reuse rules), Medical Records | M2 | COMPLETED (Backend verified, test suites pass) |
-| M4 | Financial Engine, Pricing & Reminders | Phases 8, 12, 13, 14: Practiced values, dynamic Total/Outstanding (D2), Payments, Card Installments, In-app reminders, Dashboard metrics | M3 | IN_PROGRESS (Backend & test suites verified against LocalDB) |
-| M5 | Brazilian Portuguese UI Integration & Seed Data | Phases 15 & 16: Seed script (Examples A–E), complete pt-BR UI screens, client detail [id], attendance workspace [id], real API integration | M4 | PLANNED |
+| M4 | Financial Engine, Pricing & Reminders | Phases 8, 12, 13, 14: Practiced values, dynamic Total/Outstanding (D2), Payments, Card Installments, In-app reminders, Dashboard metrics | M3 | COMPLETED (Gate PASSED, 42 test files / 289 tests) |
+| M5 | Brazilian Portuguese UI Integration & Seed Data | Phases 15 & 16: Seed script (Examples A–E), complete pt-BR UI screens, client detail [id], attendance workspace [id], real API integration | M4 | IN_PROGRESS |
 | M6 | Validation Engine & E2E Testing Verification | Phase 17: Implementation track passes 100% of E2E test suite (Tiers 1–4) + Tier 5 Adversarial Coverage Hardening | M5, TEST_READY | PLANNED |
 | M7 | Final Completion Audit & Acceptance Verification | Phase 18: Audit against 22 checklist items, 24 critical validations, D1–D7, R1–R5, and final signoff | M6 | PLANNED |
 

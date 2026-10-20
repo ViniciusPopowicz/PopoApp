@@ -14,24 +14,24 @@
 - **Database Engine**: Microsoft SQL Server LocalDB (`provider = "sqlserver"`)
   - Development DB: `PopoApp`
   - Automated Testing DB: `PopoAppTest` (isolated per D7)
-- **Active Milestone**: Milestone 4 (Financial Engine, Payments, Reminders & Dashboard — Phases 12, 13, 14)
-- **Overall Progress**: 2 of 18 phases completed (Phase 1: Foundation, Phase 4: Auth & Security); 12 phases in progress (Phases 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 with domain service/API/database verified against LocalDB; UI pending in Phase 16); 4 phases not started (Phases 16, 17, 18).
+- **Active Milestone**: Milestone 5 (Comprehensive Clinical Seed Data & pt-BR UI Integration — Phases 15 & 16)
+- **Overall Progress**: Milestone 4 complete (Gate PASSED, 42 test files / 289 tests passing, lint/build clean); Milestone 5 active.
 - **Phase Breakdown**:
   - Completed (`[x]`): 2 (Phase 1: Foundation, Phase 4: Auth & Security)
   - In Progress (`[~]`): 12 (Phases 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
   - Not Started (`[ ]`): 4 (Phases 16 through 18)
   - Blocked (`[!]`): 0
   - Needs Decision (`[?]`): 0
-- **Automated Test Coverage**: Vitest runner and .env.test configured for PopoAppTest; 40 test files, 257 tests passing (100%) against live LocalDB PopoAppTest with single-fork pool execution
+- **Automated Test Coverage**: Vitest runner and .env.test configured for PopoAppTest; 42 test files, 289 tests passing (100%) against live LocalDB PopoAppTest with single-fork pool execution
 - **Mock Data Status**: 8 mock data files present in `src/data/mock/*`; all authenticated pages currently reference mock data and will be migrated to real services in Phase 16 (R4).
 
 ---
 
 ## 2. Current Work
 
-- **Phase**: Milestone 4 — Financial Engine, Payments, Reminders & Dashboard (Phases 12, 13, 14)
-- **Current Task**: Completed implementation and automated verification of PaymentService, ReminderService, DashboardService, Next.js 15 route handlers, vitest pool config fix, automated test suites (F09, F10, F27, V20, V21, V22, V23, M4 E2E), and refactored scenarios_a_through_e.spec.ts against live LocalDB PopoAppTest.
-- **Status**: `[~]` In Progress for Milestone 4 (Backend verified; UI pending in Phase 16)
+- **Phase**: Milestone 5 — Comprehensive Clinical Seed Data & pt-BR UI Integration (Phases 15 & 16)
+- **Current Task**: Milestone 4 Gate unanimously approved (42 test files, 289 tests passing, lint/build clean). Commenced Milestone 5: implementing comprehensive clinical seed script (prisma/seed.ts — Phase 15, F28) covering §47 Examples A–E and §50.
+- **Status**: Milestone 4 [x] COMPLETED (Gate PASSED). Milestone 5 [~] IN_PROGRESS
 - **Completed**:
   - **Phase 1 (Tooling & Foundation)**: Vitest installed and configured with `vitest.config.ts`, .env.test isolation, LocalDB proxy helper, ESLint config.
   - **Phase 2 (Database & Schema)**: 18 Prisma domain models, migration deployed to `PopoApp` and `PopoAppTest`, `CK_Attachment_Ownership` CHECK constraint verified in SQL Server LocalDB engine.
@@ -106,9 +106,9 @@ When resuming development, execute these steps in order:
 | **Phase 9** | Products and Inventory | 🔴 **HIGH COMPLEXITY** | `[~]` | Product catalog, lots, physical units, same-client reuse, cross-client prohibition, single-use restrictions, API routes done; UI pending. |
 | **Phase 10** | Medical Records | Standard | `[~]` | Prontuário 1:1 with Attendance, clinical documentation fields, client history integration, API routes done; UI pending. |
 | **Phase 11** | Attachments | 🔴 **HIGH COMPLEXITY** | `[~]` | Storage outside `public/`, Client XOR Attendance exclusivity, secure streaming API done; UI components pending. |
-| **Phase 12** | Payments and Installments | 🔴 **HIGH COMPLEXITY** | `[ ]` | Multi-method payments, partial payments, credit card installments (0 reminders), PIX installment schedule. |
-| **Phase 13** | Reminders | 🔴 **HIGH COMPLEXITY** | `[ ]` | In-app reminders for PIX installments, dashboard widget, mark done/dismissed decoupled from payments. |
-| **Phase 14** | Financial Features | Standard | `[ ]` | Attendance financial summary, dynamic Total/Outstanding calculation (D2), financial ledger dashboard. |
+| **Phase 12** | Payments and Installments | 🔴 **HIGH COMPLEXITY** | [~] | Multi-method payments, partial payments, credit card installments (0 reminders), PIX installment schedule; backend verified, UI in Phase 16. |
+| **Phase 13** | Reminders | 🔴 **HIGH COMPLEXITY** | [~] | In-app reminders for PIX installments, dashboard widget, mark done/dismissed decoupled from payments; backend verified, UI in Phase 16. |
+| **Phase 14** | Financial Features | Standard | [~] | Attendance financial summary, dynamic Total/Outstanding calculation (D2), financial ledger dashboard; backend verified, UI in Phase 16. |
 | **Phase 15** | Client History | Standard | `[~]` | Chronological history API route `/api/clients/[id]/history` derived from real records; UI pending. |
 | **Phase 16** | Frontend / UX | Standard | `[ ]` | Zero mock imports, Brazilian Portuguese text, responsive design, dialogs, loading/empty/error states. |
 | **Phase 17** | Validation and Testing | Standard | `[ ]` | Automated suite (Tiers 1–4), 24 critical validations tested, Scenarios A–E tested on `PopoAppTest`. |
@@ -293,7 +293,7 @@ When resuming development, execute these steps in order:
 ---
 
 ### Phase 12 — Payments and Installments `[~]` 🔴 HIGH COMPLEXITY
-- `[~] 🔴 HIGH COMPLEXITY — Multi-method payments, partial payments, credit card installments, and PIX schedules`
+- [x] 🔴 HIGH COMPLEXITY — Multi-method payments, partial payments, credit card installments, and PIX schedules (backend complete & verified)
   - `[x]` Implement `/api/attendances/[id]/payments` API route (GET list, POST record payment)
   - `[x]` Implement credit card payment handling with stored installment count (1..12) and zero reminder generation (D5)
   - `[x]` Implement PIX installment schedule creation endpoint generating installment plan with due dates and amounts
@@ -305,7 +305,7 @@ When resuming development, execute these steps in order:
 ---
 
 ### Phase 13 — Reminders `[~]` 🔴 HIGH COMPLEXITY
-- `[~] 🔴 HIGH COMPLEXITY — In-app reminder engine for PIX installments with financial decoupling`
+- [x] 🔴 HIGH COMPLEXITY — In-app reminder engine for PIX installments with financial decoupling (backend complete & verified)
   - `[x]` Implement reminder generation service triggered by PIX installment schedule creation
   - `[x]` Implement `/api/reminders` API route (GET list with status filter, POST manual reminder)
   - `[x]` Implement `/api/reminders/[id]/status` API route (PATCH mark `concluido` or `dispensado`)
