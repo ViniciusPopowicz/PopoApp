@@ -9,10 +9,15 @@ npm-debug.log*
 # Environment files
 .env
 .env.*
+!.env.example
+!.env.test
 
 # Build folders
 dist/
 build/
+.next/
+out/
+storage/
 
 # Coverage
 coverage/
@@ -31,3 +36,4 @@ temp/
 
 # Sequelize
 sequelize-meta.json
+tsconfig.tsbuildinfo

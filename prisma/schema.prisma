@@ -1,0 +1,366 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// 1. AUTENTICAÇÃO E USUÁRIOS
+// ==========================================
+model User {
+  id           String   @id @default(uuid())
+  nickname     String   @unique
+  displayName  String
+  passwordHash String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ==========================================
+// 2. CLIENTE E CONTATOS
+// ==========================================
+model Client {
+  id             String             @id @default(uuid())
+  nome           String
+  cpf            String             @unique // Obrigatório e único (normalizado 11 dígitos)
+  telefone       String
+  email          String?
+  dataNascimento DateTime?
+  endereco       String?
+  observacoes    String?            @db.NVarChar(Max)
+  status         String             @default("ativo") // 'ativo' | 'inativo'
+  profilePhotoId String?            // Referência ao Anexo da foto de perfil
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  emergencyContacts EmergencyContact[]
+  attachments       Attachment[]
+  appointments      Appointment[]
+  attendances       Attendance[]
+  reminders         Reminder[]
+  stockUnits        StockUnit[]        // Unidades reutilizáveis vinculadas ao cliente
+
+  @@index([nome])
+  @@index([status])
+}
+
+model EmergencyContact {
+  id          String   @id @default(uuid())
+  clientId    String
+  nome        String
+  telefone    String
+  parentesco  String   // Relação com o cliente (mãe, cônjuge, etc.)
+  observacoes String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+}
+
+// ==========================================
+// 3. AGENDAMENTO E PROCEDIMENTOS PLANEJADOS
+// ==========================================
+model Appointment {
+  id                  String             @id @default(uuid())
+  clientId            String
+  dataHora            DateTime
+  status              String             @default("Agendado") // 'Agendado', 'Confirmado', 'Concluído', 'Cancelado', 'Não compareceu', 'Reagendado'
+  valorEstimado       Decimal?           @db.Decimal(10, 2)
+  observacoes         String?            @db.NVarChar(Max)
+  motivoCancelamento  String?
+  rescheduledFromId   String?            // Aponta para o agendamento de origem
+  rescheduledToId     String?            // Aponta para o novo agendamento criado
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  client              Client             @relation(fields: [clientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rescheduledFrom     Appointment?       @relation("RescheduleHistory", fields: [rescheduledFromId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rescheduledTo       Appointment[]      @relation("RescheduleHistory")
+  attendances         Attendance[]       // 1:N
+  plannedProcedures   PlannedProcedure[]
+
+  @@index([clientId])
+  @@index([dataHora])
+  @@index([status])
+}
+
+model PlannedProcedure {
+  id            String      @id @default(uuid())
+  appointmentId String
+  procedureId   String
+  ordem         Int         @default(0)
+  createdAt     DateTime    @default(now())
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  procedure   Procedure   @relation(fields: [procedureId], references: [id], onDelete: NoAction)
+
+  @@index([appointmentId])
+  @@index([procedureId])
+}
+
+// ==========================================
+// 4. ATENDIMENTO E CLÍNICA
+// ==========================================
+model Attendance {
+  id            String                @id @default(uuid())
+  appointmentId String
+  clientId      String
+  status        String                @default("Pendente") // 'Pendente', 'Realizado', 'Cancelado'
+  dataHora      DateTime              @default(now())
+  completedAt   DateTime?
+  desconto      Decimal               @default(0.00) @db.Decimal(10, 2) // Desconto explícito do atendimento
+  observacoes   String?               @db.NVarChar(Max)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  appointment   Appointment           @relation(fields: [appointmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  client        Client                @relation(fields: [clientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  procedures    AttendanceProcedure[] // Associação técnica (NÃO PerformedProcedure)
+  productUsages ProductUsage[]
+  medicalRecord MedicalRecord?
+  attachments   Attachment[]
+  payments      Payment[]
+
+  @@index([appointmentId])
+  @@index([clientId])
+  @@index([status])
+  @@index([dataHora])
+}
+
+model MedicalRecord {
+  id                  String     @id @default(uuid())
+  attendanceId        String     @unique // 1:1 estrito com Atendimento
+  queixaPrincipal     String?    @db.NVarChar(Max)
+  avaliacaoClinica    String?    @db.NVarChar(Max)
+  condutaProcedimento String?    @db.NVarChar(Max)
+  orientacoes         String?    @db.NVarChar(Max)
+  observacoes         String?    @db.NVarChar(Max)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  attendance Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// 5. CATÁLOGO DE PROCEDIMENTOS E PREÇOS
+// ==========================================
+model Procedure {
+  id             String                 @id @default(uuid())
+  nome           String
+  descricao      String?                @db.NVarChar(Max)
+  valorPadrao    Decimal                @db.Decimal(10, 2)
+  duracaoMinutos Int
+  categoria      String?
+  isActive       Boolean                @default(true)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  attendanceProcedures AttendanceProcedure[]
+  plannedAppointments  PlannedProcedure[]
+  productAssociations  ProcedureProduct[]
+
+  @@index([nome])
+  @@index([isActive])
+}
+
+model AttendanceProcedure {
+  id                    String         @id @default(uuid())
+  attendanceId          String
+  procedureId           String
+  standardValueSnapshot Decimal        @db.Decimal(10, 2) // Snapshot imutável do valor padrão na inclusão
+  practicedValue        Decimal        @db.Decimal(10, 2) // Valor praticado obrigatório e independente
+  observacoes           String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  attendance   Attendance     @relation(fields: [attendanceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  procedure    Procedure      @relation(fields: [procedureId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  productUsages ProductUsage[]
+
+  @@index([attendanceId])
+  @@index([procedureId])
+}
+
+// ==========================================
+// 6. PRODUTOS, LOTES E ESTOQUE INDIVIDUAL
+// ==========================================
+model Product {
+  id          String             @id @default(uuid())
+  nome        String
+  categoria   String?
+  marca       String?
+  descricao   String?            @db.NVarChar(Max)
+  unidade     String             // 'frasco', 'ampola', 'seringa', 'caixa', etc.
+  isReusable  Boolean            @default(false) // Reutilizável pelo mesmo cliente vs Uso único
+  isActive    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  lots                 ProductLot[]
+  procedureAssociations ProcedureProduct[]
+
+  @@index([nome])
+  @@index([isActive])
+}
+
+model ProcedureProduct {
+  procedureId String
+  productId   String
+  createdAt   DateTime @default(now())
+
+  procedure Procedure @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([procedureId, productId])
+}
+
+model ProductLot {
+  id            String      @id @default(uuid())
+  productId     String
+  numeroLote    String
+  dataValidade  DateTime?
+  dataAquisicao DateTime?
+  precoCusto    Decimal?    @db.Decimal(10, 2)
+  observacoes   String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stockUnits StockUnit[]
+
+  @@index([productId])
+  @@index([numeroLote])
+}
+
+model StockUnit {
+  id              String         @id @default(uuid())
+  lotId           String
+  codigoSerial    String         @unique // Identificador físico único (ex: UNIT-001)
+  status          String         @default("Disponivel") // 'Disponivel', 'EmUso', 'Esgotado', 'Descartado'
+  currentClientId String?        // Vinculado ao cliente caso seja produto reutilizável em uso
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  lot           ProductLot     @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  currentClient Client?        @relation(fields: [currentClientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usages        ProductUsage[]
+
+  @@index([lotId])
+  @@index([status])
+  @@index([currentClientId])
+}
+
+model ProductUsage {
+  id                    String               @id @default(uuid())
+  attendanceId          String
+  stockUnitId           String
+  attendanceProcedureId String?
+  dataHora              DateTime             @default(now())
+  observacoes           String?
+  createdAt             DateTime             @default(now())
+
+  attendance          Attendance           @relation(fields: [attendanceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  stockUnit           StockUnit            @relation(fields: [stockUnitId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  attendanceProcedure AttendanceProcedure? @relation(fields: [attendanceProcedureId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([attendanceId])
+  @@index([stockUnitId])
+  @@index([attendanceProcedureId])
+}
+
+// ==========================================
+// 7. ANEXOS E DOCUMENTOS
+// ==========================================
+model Attachment {
+  id              String      @id @default(uuid())
+  clientId        String?     // Pertence a Cliente OU Atendimento (exclusivo via CHECK)
+  attendanceId    String?     // Pertence a Cliente OU Atendimento (exclusivo via CHECK)
+  nomeOriginal    String
+  nomeArquivo     String      // Nome do arquivo gerado no disco (UUID)
+  caminhoRelativo String      // Caminho relativo dentro do STORAGE_ROOT
+  mimeType        String
+  tamanhoBytes    Int
+  categoria       String?     // 'foto_perfil', 'documento', 'termo', 'exame', 'clinico'
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  client     Client?     @relation(fields: [clientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  attendance Attendance? @relation(fields: [attendanceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([clientId])
+  @@index([attendanceId])
+}
+
+// ==========================================
+// 8. FINANCEIRO, PAGAMENTOS E LEMBRETES
+// ==========================================
+model Payment {
+  id                     String           @id @default(uuid())
+  attendanceId           String
+  valor                  Decimal          @db.Decimal(10, 2)
+  metodo                 String           // 'CartaoCredito', 'Pix', 'Dinheiro', 'CartaoDebito', 'Boleto', 'Transferencia'
+  status                 String           @default("Pago") // 'Pago', 'Pendente', 'Cancelado'
+  dataPagamento          DateTime?        @default(now())
+  numeroParcelas         Int              @default(1)
+  identificadorTransacao String?
+  observacoes            String?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  attendance      Attendance       @relation(fields: [attendanceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pixInstallments PixInstallment[]
+
+  @@index([attendanceId])
+  @@index([metodo])
+  @@index([status])
+}
+
+model PixInstallment {
+  id             String     @id @default(uuid())
+  paymentId      String
+  numeroParcela  Int
+  totalParcelas  Int
+  valor          Decimal    @db.Decimal(10, 2)
+  dataVencimento DateTime
+  dataPagamento  DateTime?
+  status         String     @default("Pendente") // 'Pendente', 'Pago', 'Atrasado', 'Cancelado'
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  payment   Payment    @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  reminders Reminder[]
+
+  @@index([paymentId])
+  @@index([dataVencimento])
+  @@index([status])
+}
+
+model Reminder {
+  id               String          @id @default(uuid())
+  clientId         String?
+  pixInstallmentId String?
+  titulo           String
+  descricao        String?         @db.NVarChar(Max)
+  dataVencimento   DateTime
+  prioridade       String          @default("media") // 'baixa', 'media', 'alta'
+  status           String          @default("pendente") // 'pendente', 'concluido', 'dispensado'
+  tipo             String          @default("parcela_pix") // 'parcela_pix', 'retorno', 'geral'
+  completedAt      DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  client         Client?         @relation(fields: [clientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pixInstallment PixInstallment? @relation(fields: [pixInstallmentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([clientId])
+  @@index([pixInstallmentId])
+  @@index([dataVencimento])
+  @@index([status])
+}

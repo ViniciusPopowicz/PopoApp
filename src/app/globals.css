@@ -1,0 +1,213 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Rosa Delicado - Default palette */
+    --background: 20 33% 97%;
+    --foreground: 340 14% 16%;
+    --card: 0 0% 100%;
+    --card-foreground: 340 14% 16%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 340 14% 16%;
+    --primary: 333 27% 58%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 333 30% 80%;
+    --secondary-foreground: 340 14% 16%;
+    --muted: 20 20% 93%;
+    --muted-foreground: 333 8% 52%;
+    --accent: 30 35% 59%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 55% 56%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 20 20% 88%;
+    --input: 20 20% 88%;
+    --ring: 333 27% 58%;
+    --radius: 0.5rem;
+    --success: 145 18% 51%;
+    --success-foreground: 0 0% 100%;
+    --warning: 40 55% 55%;
+    --warning-foreground: 0 0% 100%;
+    --error: 0 55% 56%;
+    --error-foreground: 0 0% 100%;
+    --info: 208 24% 55%;
+    --info-foreground: 0 0% 100%;
+  }
+
+  [data-theme="lavanda-suave"] {
+    --background: 260 33% 97%;
+    --foreground: 252 18% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 252 18% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 252 18% 15%;
+    --primary: 252 25% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 252 28% 80%;
+    --secondary-foreground: 252 18% 15%;
+    --muted: 260 15% 93%;
+    --muted-foreground: 240 6% 52%;
+    --accent: 15 22% 65%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 55% 56%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 260 18% 88%;
+    --input: 260 18% 88%;
+    --ring: 252 25% 60%;
+    --radius: 0.5rem;
+    --success: 145 18% 51%;
+    --success-foreground: 0 0% 100%;
+    --warning: 40 55% 55%;
+    --warning-foreground: 0 0% 100%;
+    --error: 0 55% 56%;
+    --error-foreground: 0 0% 100%;
+    --info: 208 24% 55%;
+    --info-foreground: 0 0% 100%;
+  }
+
+  [data-theme="nude-natural"] {
+    --background: 30 33% 97%;
+    --foreground: 22 14% 16%;
+    --card: 0 0% 100%;
+    --card-foreground: 22 14% 16%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 22 14% 16%;
+    --primary: 22 18% 56%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 22 18% 70%;
+    --secondary-foreground: 22 14% 16%;
+    --muted: 30 15% 93%;
+    --muted-foreground: 22 6% 52%;
+    --accent: 333 27% 58%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 55% 56%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 30 15% 88%;
+    --input: 30 15% 88%;
+    --ring: 22 18% 56%;
+    --radius: 0.5rem;
+    --success: 145 18% 51%;
+    --success-foreground: 0 0% 100%;
+    --warning: 40 55% 55%;
+    --warning-foreground: 0 0% 100%;
+    --error: 0 55% 56%;
+    --error-foreground: 0 0% 100%;
+    --info: 208 24% 55%;
+    --info-foreground: 0 0% 100%;
+  }
+
+  [data-theme="verde-sereno"] {
+    --background: 145 33% 97%;
+    --foreground: 152 14% 16%;
+    --card: 0 0% 100%;
+    --card-foreground: 152 14% 16%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 152 14% 16%;
+    --primary: 152 12% 54%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 152 18% 70%;
+    --secondary-foreground: 152 14% 16%;
+    --muted: 145 15% 93%;
+    --muted-foreground: 152 6% 52%;
+    --accent: 35 30% 62%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 55% 56%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 145 15% 88%;
+    --input: 145 15% 88%;
+    --ring: 152 12% 54%;
+    --radius: 0.5rem;
+    --success: 145 18% 51%;
+    --success-foreground: 0 0% 100%;
+    --warning: 40 55% 55%;
+    --warning-foreground: 0 0% 100%;
+    --error: 0 55% 56%;
+    --error-foreground: 0 0% 100%;
+    --info: 208 24% 55%;
+    --info-foreground: 0 0% 100%;
+  }
+
+  [data-theme="azul-classico"] {
+    --background: 215 33% 97%;
+    --foreground: 208 14% 16%;
+    --card: 0 0% 100%;
+    --card-foreground: 208 14% 16%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 208 14% 16%;
+    --primary: 208 24% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 208 20% 70%;
+    --secondary-foreground: 208 14% 16%;
+    --muted: 215 15% 93%;
+    --muted-foreground: 208 6% 52%;
+    --accent: 30 24% 55%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 55% 56%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 215 15% 88%;
+    --input: 215 15% 88%;
+    --ring: 208 24% 55%;
+    --radius: 0.5rem;
+    --success: 145 18% 51%;
+    --success-foreground: 0 0% 100%;
+    --warning: 40 55% 55%;
+    --warning-foreground: 0 0% 100%;
+    --error: 0 55% 56%;
+    --error-foreground: 0 0% 100%;
+    --info: 208 24% 55%;
+    --info-foreground: 0 0% 100%;
+  }
+
+  [data-theme="borgonha-elegante"] {
+    --background: 340 33% 97%;
+    --foreground: 340 18% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 340 18% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 340 18% 15%;
+    --primary: 340 30% 42%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 340 22% 60%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 340 12% 93%;
+    --muted-foreground: 340 6% 52%;
+    --accent: 45 38% 57%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 55% 56%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 340 12% 88%;
+    --input: 340 12% 88%;
+    --ring: 340 30% 42%;
+    --radius: 0.5rem;
+    --success: 145 18% 51%;
+    --success-foreground: 0 0% 100%;
+    --warning: 40 55% 55%;
+    --warning-foreground: 0 0% 100%;
+    --error: 0 55% 56%;
+    --error-foreground: 0 0% 100%;
+    --info: 208 24% 55%;
+    --info-foreground: 0 0% 100%;
+  }
+
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
