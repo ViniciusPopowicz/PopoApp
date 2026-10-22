@@ -100,7 +100,7 @@ async function main() {
   const adminUser = await prisma.user.create({
     data: {
       nickname: 'admin',
-      displayName: 'Dra. Paula Oliveira',
+      displayName: 'Dra. Emanuelle Noronha Popowicz',
       passwordHash,
       isActive: true,
     },
