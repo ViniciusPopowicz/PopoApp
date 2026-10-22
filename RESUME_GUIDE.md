@@ -101,8 +101,8 @@ npm start
 ## 4. 📋 Credenciais de Acesso (Base Populada pelo Seed)
 
 - **URL de Acesso**: `http://localhost:3000/login`
-- **Usuário Padrão**: `admin@popoapp.com.br` (ou qualquer usuário listado no seed)
-- **Senha Padrão**: `Admin@123`
+- **Usuário Padrão (`nickname`)**: `admin` (Dra. Paula Oliveira)
+- **Senha Padrão**: `PopoApp2024!`
 
 ---
 *PopoApp — Sistema de Gestão para Clínica Estética e Consultório Individual. 100% Concluído e Auditado.*
