@@ -54,33 +54,35 @@ The architecture enforces strict layered boundaries:
 | F39 | Tier 2: Boundary & Corner Cases Test Suite | Tests for CPF edges, decimal precisions, stock boundaries, attachment XOR constraint AC 61 | Test Track | Project Pattern Tier 2 |
 | F40 | Tier 3: Cross-Feature Combination Tests | State machine transitions, appointment-attendance-payment interactions, stock-client reuse | Test Track | Project Pattern Tier 3 |
 | F41 | Tier 4: Real-World Clinical Workflows | End-to-end clinical scenarios A through E (§47) verified against live test DB | Test Track | Project Pattern Tier 4 |
-| F42 | Tier 5: Adversarial Coverage Hardening | White-box adversarial testing, edge conditions, concurrency checks | M6 (Phase 2) | Project Pattern Tier 5 |
+| F42 | Tier 5: Adversarial Coverage Hardening | White-box adversarial testing, edge conditions, concurrency checks | Completed in M6 | Project Pattern Tier 5 |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
 | M1 | Foundation, Tooling & Database Schema | Phases 1 & 2: ESLint, Vitest, 18 Prisma domain models, SQL Server LocalDB migrations, Attachment XOR CHECK constraint | none | COMPLETED (commit `dc33eb9`) |
 | M2 | Security, Core Entities & Catalog | Phases 3, 4, 5, 11: Bcrypt auth, Client service + CPF, Procedure catalog, Authenticated file storage pipeline | M1 | COMPLETED (Gate PASSED, commit `5a17482`) |
-| M3 | Clinical Workflows, Products & Inventory | Phases 6, 7, 9, 10: Appointments (6 statuses), Attendance (D1), Inventory & Unit Traceability (reuse rules), Medical Records | M2 | COMPLETED (Backend verified, test suites pass) |
+| M3 | Clinical Workflows, Products & Inventory | Phases 6, 7, 9, 10: Appointments (6 statuses), Attendance (D1), Inventory & Unit Traceability (reuse rules), Medical Records | M2 | COMPLETED (Gate PASSED, commit `f5d9592`) |
 | M4 | Financial Engine, Pricing & Reminders | Phases 8, 12, 13, 14: Practiced values, dynamic Total/Outstanding (D2), Payments, Card Installments, In-app reminders, Dashboard metrics | M3 | COMPLETED (Gate PASSED, commit `76089a7`) |
-| M5 | Brazilian Portuguese UI Integration & Seed Data | Phases 15 & 16: Seed script (Examples A–E), complete pt-BR UI screens, client detail [id], attendance workspace [id], real API integration | M4 | COMPLETED (Gate PASSED, 44 test files / 335 tests passing) |
-| M6 | Validation Engine & E2E Testing Verification | Phase 17: Implementation track passes 100% of E2E test suite (Tiers 1–4) + Tier 5 Adversarial Coverage Hardening | M5, TEST_READY | READY_TO_START (Phase 17) |
-| M7 | Final Completion Audit & Acceptance Verification | Phase 18: Audit against 22 checklist items, 24 critical validations, D1–D7, R1–R5, and final signoff | M6 | PLANNED |
+| M5 | Brazilian Portuguese UI Integration & Seed Data | Phases 15 & 16: Seed script (Examples A–E), complete pt-BR UI screens, client detail [id], attendance workspace [id], real API integration | M4 | COMPLETED (Gate PASSED, commit `cdfcc8b`) |
+| M6 | Validation Engine & E2E Testing Verification | Phase 17: Implementation track passes 100% of E2E test suite (Tiers 1–4) + Tier 5 Adversarial Coverage Hardening | M5, TEST_READY | COMPLETED (Gate PASSED, commit `b98dfbb`) |
+| M7 | Final Completion Audit & Acceptance Verification | Phase 18: Audit against 22 checklist items, 24 critical validations, D1–D7, R1–R5, and final signoff | M6 | COMPLETED (Phase 18 Verified) |
 
 ## Resumption Protocol & Baseline Snapshot
-- **Current Verified Baseline**: Milestone 5 Gate unanimously passed (Generation 5).
+- **Current Verified Baseline**: Milestone 7 (Phase 18 Final Completion Audit) COMPLETE. All Milestones 1–7 unanimously passed.
 - **Database Status**: Microsoft SQL Server LocalDB `MSSQLLocalDB` provisioned with `PopoApp` (dev) and `PopoAppTest` (isolated test). Migration `20261006000000_init_domain_models` applied to both. `CK_Attachment_Ownership` CHECK constraint verified in engine. Development database `PopoApp` fully seeded with clinical data covering §47 Examples A–E.
 - **Protocol Bridge (Dev/Test Only)**: `tests/helpers/localdb-proxy.js` bridges TCP 1433 to LocalDB Named Pipes (`npm run db:proxy`).
-- **Test Baseline**: 44 test files, 335 tests passing (100% pass rate, 0 failures) via `npm test`.
+- **Test Baseline**: 46 test files, 393 tests passing (100% pass rate, 0 failures) via `npm test`.
 - **Code Quality**: `npm run lint` (0 errors, 0 warnings), `npm run build` (clean compilation, 26/26 routes generated cleanly).
-- **Quick Resumption Commands**:
+- **Quick Resumption / Run Commands**:
   1. `sqllocaldb start MSSQLLocalDB`
   2. `npm run db:proxy` (in background terminal if port 1433 is not already open)
-  3. `npm test` (verify 44 test files passed, 335 passed)
-  4. `npm run lint` && `npm run build` (verify clean build)
-- **Next Development Focus**:
-  - **Milestone 6 (Validation Engine & E2E Testing Verification — Phase 17)**: Execute complete end-to-end browser workflows in Playwright/browser testing against running application, covering Tiers 1–4 and Tier 5 adversarial verification.
-  - **Milestone 7 (Final Completion Audit & Acceptance Verification — Phase 18)**: Audit against 22 checklist items, 24 critical business validations, D1–D7, R1–R5, and final signoff.
+  3. `npm test` (verify 46 test files passed, 393 passed with 0 failures)
+  4. `npm run lint` && `npm run build` (verify clean build of 26 routes)
+  5. `npm run dev` or `npm start` (launch PopoApp)
+- **Project Completion Status**:
+  - PopoApp is 100% complete across all 7 milestones and 18 phases.
+  - Zero mock data imports or files remain (`src/data/mock/` completely removed).
+  - All 24 critical business validations (§32) and binding decisions D1–D7 are implemented, tested, and audited.
 
 
 

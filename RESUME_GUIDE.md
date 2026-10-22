@@ -1,112 +1,108 @@
-# 🚀 PopoApp — Guia de Retomada do Desenvolvimento (Resume Guide)
+# 🚀 PopoApp — Guia de Conclusão e Operação do Sistema (Project Completion & Operation Guide)
 
-> **Documento de Retomada Rápida e Registro de Trabalho**: Atualizado em 20/10/2026 (Generation 5) com o status completo das tarefas executadas, fechamento unânime do Gate do Milestone 4 (commit `76089a7`), conclusão e aprovação unânime do Gate do Milestone 5 (Seed Clínico Completo e Interface pt-BR em 26 rotas com zero dados mock) e roteiro exato para a próxima sessão (Milestone 6: Testes E2E no Navegador & Fase 17).
+> **Documento de Conclusão e Operação**: Atualizado em 22/10/2026 com o status de 100% de conclusão do PopoApp em todas as suas 18 fases e 7 marcos de desenvolvimento (Milestones 1 a 7). Todos os gates foram aprovados por unanimidade pela equipe de subagentes (Reviewers, Challengers e Auditor Forense), com 46 arquivos de teste e 393 testes passando (0 falhas), zero dados mock e compilação de produção limpa em todas as 26 rotas.
 
 ---
 
-## 1. 📌 Estado Atual do Projeto
+## 1. 📌 Estado Final do Projeto (100% Concluído)
 
 - **Status Geral**:
   - **Milestone 1 Gate**: **APROVADO UNANIMEMENTE** (commit `dc33eb9`).
   - **Milestone 2 Gate**: **APROVADO UNANIMEMENTE** (commit `5a17482`).
-  - **Milestone 3 Gate**: **APROVADO UNANIMEMENTE** (backend verificado e testado).
-  - **Milestone 4 Gate**: **APROVADO UNANIMEMENTE** (commit `76089a7`, 42 arquivos de teste / 289 testes).
-  - **Milestone 5 Gate**: **APROVADO UNANIMEMENTE** (5/5 subagentes aprovam: 2 Reviewers, 2 Challengers com 46 testes adversários, 1 Auditor CLEAN).
+  - **Milestone 3 Gate**: **APROVADO UNANIMEMENTE** (commit `f5d9592`).
+  - **Milestone 4 Gate**: **APROVADO UNANIMEMENTE** (commit `76089a7`).
+  - **Milestone 5 Gate**: **APROVADO UNANIMEMENTE** (commit `cdfcc8b`).
+  - **Milestone 6 Gate**: **APROVADO UNANIMEMENTE** (commit `b98dfbb`).
+  - **Milestone 7 (Fase 18)**: **CONCLUÍDO E AUDITADO** (22/22 itens de auditoria verificados, zero falsas conclusões em 10 spot-checks).
 - **Instância LocalDB**: Microsoft SQL Server LocalDB (`MSSQLLocalDB`).
   - Base Dev: `PopoApp` (totalmente populada com o seed clínico `prisma/seed.ts` cobrindo os Exemplos A a E do §47).
-  - Base Testes: `PopoAppTest` (isolado per D7).
+  - Base Testes: `PopoAppTest` (isolada estritamente per D7).
 - **Proxy LocalDB**: `tests/helpers/localdb-proxy.js` (TCP 1433 -> LocalDB Named Pipe).
 - **Suíte de Testes Automatizados (Vitest)**:
-  - **44 arquivos de teste executados e 100% passando** (`44 passed`, **335 tests passed, 0 failures**).
-  - Configurado `pool: 'forks'` com `singleFork: true` em `vitest.config.ts` para execução sequencial determinística sem deadlocks no LocalDB.
-  - Testes cobrem Tiers 1–4 completos mais hardening adversário Tier 5 (M2, M3, M4, M5).
-- **Qualidade de Código**:
+  - **46 arquivos de teste executados e 100% passando** (**393 testes passando, 0 falhas**).
+  - Configurado `pool: 'forks'` com `singleFork: true` em `vitest.config.ts` para execução sequencial determinística sem concorrência destrutiva no LocalDB.
+  - Testes cobrem Tiers 1–4 completos mais hardening adversário Tier 5 (M2, M3, M4, M5, M6).
+- **Qualidade de Código e Produção**:
   - `npm run lint`: **0 warnings, 0 errors**.
   - `npm run build`: **Compilação de produção limpa (26/26 rotas estáticas e dinâmicas geradas)**.
-  - Zero imports de `@/data/mock` nas 26 rotas autenticadas da aplicação (mock files dormentes/não utilizados).
+  - **Zero dados mock**: diretório `src/data/mock/` completamente eliminado do repositório; 100% das páginas e componentes autenticados consom serviços e APIs reais integrados ao banco de dados.
 
 ---
 
-## 2. 🛠️ Trabalho Realizado Nesta Sessão (Generation 5)
+## 2. 🛠️ Resumo Consolidado dos Milestones (1 a 7)
 
-### 2.1 Aprovação Unânime do Gate do Milestone 4 (commit `76089a7`)
-O Gate do Milestone 4 foi homologado e commitado em `76089a7`, cobrindo as Fases 12, 13 e 14 com motor financeiro, pagamentos parciais, parcelas PIX e cartão, lembretes in-app desacoplados e agregação do dashboard.
+### Milestone 1 — Fundação, Ferramental e Modelagem de Dados (Fases 1 e 2)
+- 18 modelos de domínio relacionais no `prisma/schema.prisma` com tipos decimais `@db.Decimal(10, 2)` para valores monetários.
+- Migração inicial `20261006000000_init_domain_models` aplicada às bases `PopoApp` e `PopoAppTest`.
+- Constraint `CHECK` exclusiva `CK_Attachment_Ownership` criada no SQL Server para garantir que um anexo pertença a um Cliente OU a um Atendimento, nunca a ambos e nunca a nenhum (AC 61).
 
-### 2.2 Milestone 5 Parte 1 — Seed Clínico Abrangente (`prisma/seed.ts` — Fase 15, F28)
-Implementado script de seed idempotente (`prisma/seed.ts`) que popula a base de desenvolvimento `PopoApp` com o fluxo clínico completo:
-- 6 usuários autenticáveis (senha padrão `Admin@123`).
-- 10 clientes cadastrados com CPFs válidos normalizados e contatos de emergência.
-- 8 procedimentos com valores padrão positivos.
-- 6 produtos, 9 lotes com datas de validade futuras e 29 unidades físicas rastreáveis (`StockUnit`).
-- 13 agendamentos cobrindo os 6 status canônicos e procedimentos planejados.
-- 13 atendimentos com a máquina de estados D1 (`Pendente`, `Realizado`, `Cancelado`).
-- 19 procedimentos realizados com snapshot imutável de valor padrão e valor praticado explícito.
-- 8 prontuários médicos vinculados estritamente 1:1 ao atendimento.
-- 13 consumos de produtos com unidades rastreáveis, respeitando reuso pelo mesmo cliente e regras de descarte.
-- 11 anexos clínicos com armazenamento em disco fora da raiz web (`./storage/uploads`).
-- 13 pagamentos em múltiplos métodos, 6 parcelas de PIX com datas de vencimento e 12 lembretes in-app.
-- Reprodução fidedigna dos Cenários A a E (§47 e §50).
+### Milestone 2 — Segurança, Entidades Principais e Catálogo (Fases 3, 4, 5 e 11)
+- Autenticação real com bcrypt e iron-session; middleware protegendo rotas `/api/*` com retorno 401 JSON e redirecionamento de páginas para `/login`.
+- Validação e normalização de CPF via algoritmo módulo 11 brasileiro (`src/lib/cpf.ts`).
+- `ClientService` com unicidade de CPF e contatos de emergência preservando a ordem do chamador.
+- `ProcedureService` com validações de preço padrão positivo e desativação suave.
+- Pipeline seguro de armazenamento de arquivos em disco fora da raiz pública (`./storage/uploads/`) com nomes UUID e rota de streaming autenticada `/api/attachments/[id]`.
 
-### 2.3 Milestone 5 Parte 2 — Integração Completa da Interface pt-BR (Fase 16, F29–F36)
-Eliminação total de dependências de mock (`0` ocorrências de `@/data/mock` em todas as páginas autenticadas e componentes). Telas e fluxos construídos:
-1. `/clientes` e `/clientes/[id]`: Listagem com busca em tempo real, máscara de CPF (MOD 11), modal de cadastro/edição com contatos de emergência, desativação suave, e página de detalhes completa com timeline de histórico organizada em abas (Agendamentos, Atendimentos, Procedimentos, Produtos, Prontuários, Pagamentos, Anexos).
-2. `/agenda`: Calendário responsivo com visões de Dia, Semana e Mês, modal de novo agendamento com seleção de cliente e procedimentos planejados, detalhes do agendamento, cancelamento com justificativa e reagendamento atômico em cascata (D1).
-3. `/atendimentos` e `/atendimentos/[id]`: Listagem filtrada por status e Workspace Clínico dedicado com:
-   - Associação de procedimentos, snapshot de valor padrão e valor praticado independente.
-   - Aplicação de desconto explícito e cálculo em tempo real do Total e Saldo Devedor (D2).
-   - Seletor de unidades físicas de estoque com aplicação de regras de reuso pelo mesmo cliente e bloqueio em português.
-   - Editor de Prontuário Médico integrado (1:1 per V19).
-   - Galeria e upload seguro de anexos clínicos.
-   - Modal de registro de pagamentos parciais e cronograma de parcelas PIX.
-   - Transição manual de conclusão para `Realizado`.
-4. `/procedimentos`: Catálogo de procedimentos com criação, edição, filtros por categoria e toggle de status ativo/inativo.
-5. `/produtos`: Catálogo de produtos (reutilizáveis e descartáveis), recebimento de lotes com vencimento, geração de códigos de barra e histórico de rastreabilidade.
-6. `/financeiro`: Dashboard financeiro com métricas de faturamento bruto/líquido, recebimentos, contas a receber, fluxo de caixa e livro-razão de transações.
-7. `/lembretes`: Gestão de lembretes internos com filtros por status (`pendente`, `concluido`, `dispensado`) para parcelas de PIX a vencer e vencidas, mantendo desacoplamento financeiro (V23).
-8. `/`: Dashboard executivo com métricas agregadas do dia, alertas de estoque baixo ($\le 5$ unidades), aniversariantes e widget de lembretes.
+### Milestone 3 — Fluxos Clínicos, Produtos e Inventário (Fases 6, 7, 9 e 10)
+- `AppointmentService`: 6 status canônicos (`Agendado`, `Confirmado`, `Concluído`, `Cancelado`, `Não compareceu`, `Reagendado`), proibição de `Em atendimento`, procedimentos planejados e reagendamento atômico em cascata.
+- `AttendanceService`: Máquina de estados D1 (criação automática como `Pendente`, conclusão manual como `Realizado`, cancelamento automático ao cancelar/reagendar agendamento), snapshot de valores padrão e valores praticados explícitos.
+- `StockService`: Rastreabilidade de unidades físicas (`Product -> Lot -> IndividualStockUnit -> ProductUsage`), permissão de reuso de unidade reutilizável pelo mesmo cliente e bloqueio estrito de reuso por outro cliente com mensagem em português `"Esta unidade de estoque já está vinculada a outro cliente."` (AC 59, AC 66).
+- `MedicalRecordService`: Prontuário clínico estritamente 1:1 com Atendimento (V19).
 
-### 2.4 Avaliação Unânime do Gate do Milestone 5
-O Gate do Milestone 5 foi avaliado e aprovado com unanimidade por 5 subagentes independentes:
-1. `reviewer_m5_1`: **APPROVE** (eliminação completa de mocks, Core UI verificado, idempotência do seed, lint/build limpos).
-2. `reviewer_m5_2`: **APPROVE** (Clinical UI, Workspace Clínico e invariantes D1/D2/D3/V23 validados).
-3. `challenger_m5_1`: **APPROVE** (28 testes adversários em `tests/tier5_adversarial/m5_adversarial_ui_core.spec.ts`).
-4. `challenger_m5_2`: **APPROVE** (18 testes adversários em `tests/tier5_adversarial/m5_adversarial_clinical_seed.spec.ts`).
-5. `auditor_m5_1`: **CLEAN** (eliminação genuína de mocks, integração real entre frontend e APIs, isolamento estrito D7 mantido).
+### Milestone 4 — Motor Financeiro, Pagamentos, Lembretes e Dashboard (Fases 8, 12, 13 e 14)
+- `PaymentService`: Múltiplos métodos de pagamento (Dinheiro, Cartão de Crédito, Cartão de Débito, PIX), suporte a pagamentos parciais, cálculo dinâmico de Total e Saldo Devedor (D2: computados sob demanda, nunca armazenados), parcelamento em cartão sem geração de lembretes (D5) e geração de cronograma de parcelas PIX com vencimentos.
+- `ReminderService`: Lembretes in-app exclusivos para parcelas PIX, listagem e filtro de vencidos/a vencer, e total desacoplamento financeiro (marcar lembrete concluído ou dispensado jamais altera o status do pagamento ou saldo per V23).
+- `DashboardService`: Agregação de faturamento bruto/líquido, recebimentos, contas a receber, fluxo de caixa e alertas de estoque baixo ($\le 5$ unidades).
+
+### Milestone 5 — Seed Clínico Abrangente e Interface pt-BR (Fases 15 e 16)
+- Script de seed clínico `prisma/seed.ts` (1.180 linhas) populando a base de desenvolvimento `PopoApp` com o fluxo clínico completo cobrindo os Cenários A a E do §47.
+- Interface 100% em português brasileiro em todas as 26 rotas, com máscaras de CPF, formatação de moeda BRL (`R$ 0,00`), datas (`dd/MM/yyyy`), workspace clínico `/atendimentos/[id]`, gestão de agenda com visões de Dia/Semana/Mês e histórico completo do cliente em `/clientes/[id]`.
+
+### Milestone 6 — Verificação E2E, Eliminação de Mocks e Hardening Adversário (Fase 17)
+- Remoção definitiva da pasta `src/data/mock/` (8 arquivos excluídos).
+- Criação de 58 novos testes adversários Tier 5 em `tests/tier5_adversarial/m6_adversarial_security_rules.spec.ts` (33 testes) e `tests/tier5_adversarial/m6_adversarial_workflow_financial.spec.ts` (25 testes), totalizando 46 arquivos e 393 testes passando com 100% de sucesso.
+- Gate aprovado por unanimidade (commit `b98dfbb`).
+
+### Milestone 7 — Auditoria Final de Aceite e Estabilização (Fase 18)
+- Verificação exaustiva de todos os 22 itens da auditoria final em `IMPLEMENTATION_CHECKLIST.md` (§11).
+- 10 spot-checks com comprovação em código, banco de dados e testes comprovando zero falsas conclusões.
+- Atualização completa de documentação (`IMPLEMENTATION_CHECKLIST.md`, `PROJECT.md`, `RESUME_GUIDE.md`).
+- Confirmação de integridade operacional para uso em produção.
 
 ---
 
-## 3. 🛑 Ponto Exato de Parada (Exact Stopping Point)
-
-- **Milestone 5 (Fases 15 e 16) está 100% concluído e com Gate APROVADO UNANIMEMENTE**.
-- **Ponto de parada exato**: Finalização do Gate do Milestone 5 e aplicação da diretiva de pausa para documentação e salvamento de estado no Git.
-- **Próximos Passos (Próxima Sessão)**:
-  1. **Milestone 6 (Fase 17: Motor de Validação & Verificação de Testes E2E no Navegador)**:
-     - Executar suíte de testes de ponta a ponta com Playwright / browser testing simulando o usuário real através do navegador nas 26 rotas.
-     - Hardening de testes adversários Tier 5 para cobertura completa dos fluxos clínicos e de segurança.
-  2. **Milestone 7 (Fase 18: Auditoria Final de Aceite e Conclusão)**:
-     - Auditoria final de conformidade contra todos os 22 itens do checklist (§11 de `IMPLEMENTATION_CHECKLIST.md`), 24 validações críticas (§32), decisões vinculantes D1–D7 e requisitos R1–R5.
-     - Emissão do relatório final e encerramento do projeto.
-
----
-
-## 4. ⚡ Comandos para Retomada Rápida
+## 3. ⚡ Comandos para Execução e Operação
 
 Na raiz do projeto (`c:\Users\Vinicius\PopoApp\PopoApp`):
 
 ```powershell
-# 1. Iniciar o LocalDB (se não estiver rodando)
+# 1. Iniciar o LocalDB (se não estiver em execução)
 sqllocaldb start MSSQLLocalDB
 
-# 2. Iniciar o proxy TCP do LocalDB (se porta 1433 não estiver ouvindo)
+# 2. Iniciar o proxy TCP do LocalDB (necessário para conexão do Prisma na porta 1433)
 npm run db:proxy
 
-# 3. Executar a suíte completa de testes (esperado: 44 test files passed, 335 passed)
+# 3. Executar a suíte completa de testes (46 arquivos, 393 testes passando)
 npm test
 
-# 4. Validar linter e build
+# 4. Validar linter e compilação de produção
 npm run lint
 npm run build
+
+# 5. Executar aplicação em modo de desenvolvimento
+npm run dev
+
+# 6. Executar aplicação em modo de produção
+npm start
 ```
 
 ---
-*PopoApp — Documento de Retomada consolidado em 20/10/2026 após aprovação unânime do Gate do Milestone 5.*
+
+## 4. 📋 Credenciais de Acesso (Base Populada pelo Seed)
+
+- **URL de Acesso**: `http://localhost:3000/login`
+- **Usuário Padrão**: `admin@popoapp.com.br` (ou qualquer usuário listado no seed)
+- **Senha Padrão**: `Admin@123`
+
+---
+*PopoApp — Sistema de Gestão para Clínica Estética e Consultório Individual. 100% Concluído e Auditado.*
