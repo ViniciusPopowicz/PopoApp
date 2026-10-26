@@ -84,44 +84,52 @@ describe('Tier 1 Feature F17: Appointment Domain Service (Phase 6, D1, D3, V01, 
     expect(confirmedAgain.status).toBe('Confirmado');
   });
 
-  it('F17.5 (D1 Rule 2 & 5): cancelAppointment cascades Cancelado to pending attendance but preserves Realizado attendance', async () => {
+  it('F17.5 (D1 Rule 2 & 5 & 1:1): cancelAppointment cascades Cancelado to pending attendance, preserves Realizado attendance, and rejects duplicate attendance on same appointment', async () => {
     const client = await createTestClient();
-    const appt = await AppointmentService.createAppointment({
+    const appt1 = await AppointmentService.createAppointment({
       clientId: client.id,
       dataHora: new Date(Date.now() + 86400000),
     });
 
-    const pendingAttId = appt.attendances[0].id;
+    const pendingAttId = appt1.attendances[0].id;
 
-    // Create a secondary attendance marked as Realizado
-    const secondAtt = await (prismaTest as any).attendance.create({
-      data: {
-        appointmentId: appt.id,
+    // 1:1 invariant: attempting to create a second attendance on appt1 is rejected
+    await expect(
+      AttendanceService.createAttendance({
+        appointmentId: appt1.id,
         clientId: client.id,
-        status: 'Realizado',
-        completedAt: new Date(),
-      },
-    });
+      })
+    ).rejects.toThrow();
 
-    // Cancel appointment
-    const cancelled = await AppointmentService.cancelAppointment(appt.id, {
+    // Cancel appointment 1 -> pending attendance becomes Cancelado
+    const cancelled = await AppointmentService.cancelAppointment(appt1.id, {
       motivoCancelamento: 'Cliente solicitou cancelamento por motivos pessoais',
     });
 
     expect(cancelled.status).toBe('Cancelado');
     expect(cancelled.motivoCancelamento).toBe('Cliente solicitou cancelamento por motivos pessoais');
 
-    // Pending attendance is now Cancelado
     const updatedPendingAtt = await (prismaTest as any).attendance.findUnique({
       where: { id: pendingAttId },
     });
     expect(updatedPendingAtt.status).toBe('Cancelado');
 
-    // Completed attendance remains Realizado (D1 Rule 5)
-    const updatedSecondAtt = await (prismaTest as any).attendance.findUnique({
-      where: { id: secondAtt.id },
+    // Appointment 2 with Realizado attendance: cancelling appointment preserves Realizado attendance (D1 Rule 5)
+    const appt2 = await AppointmentService.createAppointment({
+      clientId: client.id,
+      dataHora: new Date(Date.now() + 172800000),
     });
-    expect(updatedSecondAtt.status).toBe('Realizado');
+    const realizedAttId = appt2.attendances[0].id;
+    await AttendanceService.completeAttendance(realizedAttId);
+
+    await AppointmentService.cancelAppointment(appt2.id, {
+      motivoCancelamento: 'Cancelamento administrativo posterior',
+    });
+
+    const updatedRealizedAtt = await (prismaTest as any).attendance.findUnique({
+      where: { id: realizedAttId },
+    });
+    expect(updatedRealizedAtt.status).toBe('Realizado');
   });
 
   it('F17.6 (D1 Rule 3): markNoShow marks appointment as Não compareceu and cascades Cancelado to pending attendance', async () => {

@@ -29,6 +29,15 @@ async function hasValidSession(request: NextRequest): Promise<boolean> {
   }
 }
 
+function hasValidCronSecret(request: NextRequest): boolean {
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) return false;
+  const headerSecret =
+    request.headers.get('x-cron-secret') ??
+    request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+  return Boolean(headerSecret && headerSecret === cronSecret);
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -39,6 +48,11 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/_next') ||
     pathname === '/favicon.ico'
   ) {
+    return NextResponse.next();
+  }
+
+  // Allow scheduled cron endpoint when authenticated with CRON_SECRET
+  if (pathname === '/api/reminders/process-due' && hasValidCronSecret(request)) {
     return NextResponse.next();
   }
 

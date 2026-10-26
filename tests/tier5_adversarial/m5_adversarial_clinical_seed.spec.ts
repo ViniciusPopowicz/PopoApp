@@ -289,7 +289,7 @@ describe('Tier 5 Adversarial Verification: Milestone 5 Clinical Workspace & Seed
       const apptOrig = await prismaTest.appointment.findFirst({
         where: { status: 'Reagendado' },
         include: {
-          attendances: true,
+          attendance: true,
           rescheduledTo: true,
         },
       });
@@ -299,14 +299,14 @@ describe('Tier 5 Adversarial Verification: Milestone 5 Clinical Workspace & Seed
       expect(apptOrig!.motivoCancelamento).toBeTruthy();
 
       // Associated attendance must be Cancelado per D1 Rule 4
-      expect(apptOrig!.attendances).toHaveLength(1);
-      expect(apptOrig!.attendances[0].status).toBe('Cancelado');
+      expect(apptOrig!.attendance).not.toBeNull();
+      expect(apptOrig!.attendance!.status).toBe('Cancelado');
 
       // New appointment
       const apptNew = await prismaTest.appointment.findUnique({
         where: { id: apptOrig!.rescheduledToId! },
         include: {
-          attendances: true,
+          attendance: true,
           rescheduledFrom: true,
         },
       });
@@ -316,8 +316,8 @@ describe('Tier 5 Adversarial Verification: Milestone 5 Clinical Workspace & Seed
       expect(apptNew!.rescheduledFromId).toBe(apptOrig!.id);
 
       // Associated attendance for new appointment must be Pendente per D1 Rule 2
-      expect(apptNew!.attendances).toHaveLength(1);
-      expect(apptNew!.attendances[0].status).toBe('Pendente');
+      expect(apptNew!.attendance).not.toBeNull();
+      expect(apptNew!.attendance!.status).toBe('Pendente');
     });
   });
 

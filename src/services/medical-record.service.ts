@@ -33,11 +33,11 @@ export class MedicalRecordService {
       const record = await prisma.medicalRecord.create({
         data: {
           attendanceId: data.attendanceId,
-          queixaPrincipal: data.queixaPrincipal,
-          avaliacaoClinica: data.avaliacaoClinica,
-          condutaProcedimento: data.condutaProcedimento,
-          orientacoes: data.orientacoes,
-          observacoes: data.observacoes,
+          queixaPrincipal: data.queixaPrincipal ?? null,
+          avaliacaoClinica: data.avaliacaoClinica ?? (data as any).anamnese ?? null,
+          condutaProcedimento: data.condutaProcedimento ?? (data as any).evolucaoClinica ?? null,
+          orientacoes: data.orientacoes ?? (data as any).orientacoesPosProcedimento ?? null,
+          observacoes: data.observacoes ?? null,
         },
         include: {
           attendance: {

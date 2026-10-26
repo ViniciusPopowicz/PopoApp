@@ -255,6 +255,12 @@ export class ClientService {
             medicalRecord: true,
             productUsages: {
               include: {
+                product: true,
+                lot: {
+                  include: {
+                    product: true,
+                  },
+                },
                 stockUnit: {
                   include: {
                     lot: {
@@ -267,6 +273,7 @@ export class ClientService {
               },
             },
             payments: {
+              include: { pixInstallments: true },
               orderBy: { createdAt: 'asc' },
             },
             attachments: {

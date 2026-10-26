@@ -25,7 +25,7 @@ import { formatCurrency, formatDate, formatDateTime, formatTime } from '@/lib/fo
 interface AttendanceItem {
   id: string;
   clientId: string;
-  appointmentId: string;
+  appointmentId: string | null;
   dataHora: string;
   status: 'Pendente' | 'Realizado' | 'Cancelado';
   observacoes?: string | null;

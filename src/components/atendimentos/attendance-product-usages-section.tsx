@@ -1,11 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -16,6 +13,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -23,52 +23,91 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Boxes, QrCode, AlertTriangle, AlertCircle, CheckCircle2 } from 'lucide-react';
+import {
+  Boxes,
+  Plus,
+  QrCode,
+  ShieldCheck,
+  AlertTriangle,
+  Info,
+  RotateCcw,
+} from 'lucide-react';
 import { formatDateTime } from '@/lib/format';
 
-interface StockUnitItem {
+interface ProductUsageItem {
+  id: string;
+  stockUnitId: string | null;
+  codigoSerial?: string | null;
+  productId?: string | null;
+  lotId?: string | null;
+  numeroLote?: string | null;
+  productName?: string;
+  isReusable?: boolean;
+  quantidade?: number;
+  unidade?: string | null;
+  status?: string;
+  dataHora: string;
+  observacoes?: string | null;
+  attendanceProcedureId?: string | null;
+  procedureName?: string | null;
+  stockUnit?: {
+    id: string;
+    codigoSerial: string;
+    status: string;
+    lot: {
+      id: string;
+      numeroLote: string;
+      dataValidade?: string | null;
+      product: {
+        id: string;
+        nome: string;
+        isReusable: boolean;
+      };
+    };
+  } | null;
+  attendanceProcedure?: {
+    id: string;
+    procedure: {
+      id: string;
+      nome: string;
+    };
+  } | null;
+}
+
+interface AvailableUnitOption {
   id: string;
   codigoSerial: string;
   status: string;
+  currentClientId?: string | null;
+  productName?: string;
+  isReusable?: boolean;
+  numeroLote?: string;
+  unidade?: string;
+  quantidadeDisponivel?: number;
   lot?: {
+    id: string;
     numeroLote: string;
+    dataValidade?: string | null;
     product: {
       id: string;
       nome: string;
       isReusable: boolean;
-      unidade: string;
     };
   };
-}
-
-interface ProductUsageItem {
-  id: string;
-  stockUnitId: string;
-  dataHora: string;
-  observacoes?: string | null;
-  stockUnit: {
-    codigoSerial: string;
-    lot: {
-      numeroLote: string;
-      product: {
-        nome: string;
-        isReusable: boolean;
-        unidade: string;
-      };
-    };
-  };
-  attendanceProcedure?: {
-    procedure: {
-      nome: string;
-    };
-  } | null;
 }
 
 interface AttendanceProductUsagesSectionProps {
   attendanceId: string;
   clientId: string;
   status: 'Pendente' | 'Realizado' | 'Cancelado';
-  procedures: Array<{ id: string; procedure: { nome: string } }>;
+  procedures: Array<{
+    id: string;
+    procedureId: string;
+    procedure: {
+      id: string;
+      nome: string;
+    };
+  }>;
   onRefresh: () => Promise<void>;
 }
 
@@ -80,95 +119,110 @@ export function AttendanceProductUsagesSection({
   onRefresh,
 }: AttendanceProductUsagesSectionProps) {
   const [usages, setUsages] = useState<ProductUsageItem[]>([]);
-  const [availableUnits, setAvailableUnits] = useState<StockUnitItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Record usage dialog
   const [showRecordDialog, setShowRecordDialog] = useState(false);
-  const [selectedUnitId, setSelectedUnitId] = useState('');
+  const [mode, setMode] = useState<'UNIT' | 'QUANTITY'>('UNIT');
+  const [availableUnits, setAvailableUnits] = useState<AvailableUnitOption[]>([]);
+  const [quantityProducts, setQuantityProducts] = useState<any[]>([]);
+  const [selectedUnitId, setSelectedUnitId] = useState<string>('');
+  const [selectedProductId, setSelectedProductId] = useState<string>('');
+  const [consumeQuantity, setConsumeQuantity] = useState<string>('1');
   const [selectedAttendanceProcId, setSelectedAttendanceProcId] = useState<string>('none');
   const [usageNotes, setUsageNotes] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
   const [recordError, setRecordError] = useState<string | null>(null);
 
-  const isEditable = status === 'Pendente';
+  const isCanceled = status === 'Cancelado';
 
-  // Load existing usages
-  const loadUsages = async () => {
+  const fetchUsages = async () => {
     try {
+      setLoading(true);
+      setError(null);
       const res = await fetch(`/api/attendances/${attendanceId}/usages`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.data) {
-          // Map to uniform shape
-          const mapped: ProductUsageItem[] = json.data.map((u: any) => ({
-            id: u.id,
-            stockUnitId: u.stockUnitId,
-            dataHora: u.dataHora,
-            observacoes: u.observacoes,
-            stockUnit: {
-              codigoSerial: u.codigoSerial,
-              lot: {
-                numeroLote: '',
-                product: {
-                  nome: u.productName,
-                  isReusable: u.isReusable,
-                  unidade: '',
-                },
-              },
-            },
-            attendanceProcedure: u.procedureName
-              ? { procedure: { nome: u.procedureName } }
-              : null,
-          }));
-          setUsages(mapped);
-        }
+      if (!res.ok) {
+        throw new Error('Falha ao carregar usos de produtos do atendimento.');
       }
-    } catch (err) {
-      console.error('Error loading usages:', err);
-    }
-  };
-
-  // Load available stock units for this client
-  const loadAvailableUnits = async () => {
-    try {
-      const res = await fetch(`/api/stock/units?clientId=${clientId}`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.data) {
-          setAvailableUnits(json.data);
-        }
+      const json = await res.json();
+      if (json.success && json.data) {
+        setUsages(json.data);
       }
-    } catch (err) {
-      console.error('Error loading available units:', err);
+    } catch (err: any) {
+      console.error('Error fetching product usages:', err);
+      setError(err.message || 'Erro ao carregar produtos utilizados.');
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadUsages();
-    if (isEditable) {
-      loadAvailableUnits();
-    }
+    fetchUsages();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attendanceId, clientId, isEditable]);
+  }, [attendanceId]);
 
-  // Record usage handler
+  const loadAvailableOptions = async () => {
+    try {
+      const [unitsRes, prodsRes] = await Promise.all([
+        fetch(`/api/stock/units?availableForClientId=${clientId}&clientId=${clientId}`),
+        fetch(`/api/products?active=true`),
+      ]);
+      if (unitsRes.ok) {
+        const json = await unitsRes.json();
+        if (json.success && json.data) {
+          setAvailableUnits(json.data);
+        }
+      }
+      if (prodsRes.ok) {
+        const json = await prodsRes.json();
+        if (json.success && json.data) {
+          setQuantityProducts(
+            json.data.filter((p: any) => p.trackingMode === 'QUANTITY' && p.totalQuantityAvailable > 0)
+          );
+        }
+      }
+    } catch (err) {
+      console.error('Error loading available stock options:', err);
+    }
+  };
+
+  const handleOpenRecordDialog = async () => {
+    setRecordError(null);
+    setSelectedUnitId('');
+    setSelectedProductId('');
+    setConsumeQuantity('1');
+    setSelectedAttendanceProcId('none');
+    setUsageNotes('');
+    setShowRecordDialog(true);
+    await loadAvailableOptions();
+  };
+
   const handleRecordUsage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedUnitId) {
-      setRecordError('Selecione uma unidade de estoque para registrar o uso.');
+    setRecordError(null);
+
+    if (mode === 'UNIT' && !selectedUnitId) {
+      setRecordError('Selecione uma unidade física de estoque disponível.');
+      return;
+    }
+    if (mode === 'QUANTITY' && (!selectedProductId || Number(consumeQuantity) <= 0)) {
+      setRecordError('Selecione o produto consumível e informe uma quantidade maior que zero.');
       return;
     }
 
     try {
-      setLoading(true);
-      setRecordError(null);
-
-      const payload = {
-        stockUnitId: selectedUnitId,
+      setActionLoading(true);
+      const payload: Record<string, any> = {
         attendanceProcedureId: selectedAttendanceProcId !== 'none' ? selectedAttendanceProcId : null,
-        observacoes: usageNotes.trim() || null,
+        observacoes: usageNotes.trim() ? usageNotes.trim() : null,
       };
+
+      if (mode === 'UNIT') {
+        payload.stockUnitId = selectedUnitId;
+      } else {
+        payload.productId = selectedProductId;
+        payload.quantidade = Number(consumeQuantity);
+      }
 
       const res = await fetch(`/api/attendances/${attendanceId}/usages`, {
         method: 'POST',
@@ -182,95 +236,140 @@ export function AttendanceProductUsagesSection({
       }
 
       setShowRecordDialog(false);
-      setSelectedUnitId('');
-      setSelectedAttendanceProcId('none');
-      setUsageNotes('');
-      await Promise.all([loadUsages(), loadAvailableUnits(), onRefresh()]);
+      await fetchUsages();
+      await onRefresh();
     } catch (err: any) {
-      setRecordError(err.message || 'Falha ao registrar uso do produto.');
+      setRecordError(err.message || 'Erro ao registrar uso do produto.');
     } finally {
-      setLoading(false);
+      setActionLoading(false);
+    }
+  };
+
+  const handleReverseUsage = async (usageId: string) => {
+    const motivo = prompt('Informe o motivo do estorno deste consumo de estoque:', 'Correção de lançamento');
+    if (!motivo) return;
+    try {
+      const res = await fetch(`/api/attendances/${attendanceId}/usages/${usageId}/reverse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ motivo }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        alert(json.error || 'Erro ao estornar consumo');
+        return;
+      }
+      await fetchUsages();
+      await onRefresh();
+    } catch (err: any) {
+      alert(err.message || 'Erro ao estornar consumo');
     }
   };
 
   return (
     <Card>
-      <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 gap-3">
+      <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3">
         <div>
           <CardTitle className="text-lg flex items-center gap-2">
             <Boxes className="h-5 w-5 text-primary" />
-            Uso e Rastreabilidade de Produtos
+            <span>Rastreabilidade de Produtos & Insumos</span>
           </CardTitle>
           <CardDescription>
-            Controle de unidades físicas individuais utilizadas, rastreabilidade por lote/código serial e regras de reutilização.
+            Registro de unidades físicas (código serial) e consumo parcial/fracionado de insumos com controle de lote e saldo.
           </CardDescription>
         </div>
 
-        {isEditable && (
-          <Button size="sm" onClick={() => setShowRecordDialog(true)} disabled={loading} className="gap-1.5">
-            <Plus className="h-4 w-4" />
-            <span>Registrar Uso de Unidade</span>
+        {!isCanceled && (
+          <Button size="sm" onClick={handleOpenRecordDialog}>
+            <Plus className="h-4 w-4 mr-1.5" />
+            Registrar Consumo de Produto
           </Button>
         )}
       </CardHeader>
 
       <CardContent className="space-y-4">
         {error && (
-          <div className="p-3 bg-destructive/15 text-destructive rounded-md text-sm flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 flex-shrink-0" />
-            <span>{error}</span>
-          </div>
+          <div className="p-3 bg-destructive/15 text-destructive rounded-md text-xs">{error}</div>
         )}
 
-        {usages.length === 0 ? (
-          <div className="py-8 text-center text-muted-foreground text-sm border rounded-lg border-dashed">
-            Nenhum produto ou unidade física registrada neste atendimento.
-            {isEditable && (
-              <p className="text-xs text-primary mt-1">
-                Clique em &quot;Registrar Uso de Unidade&quot; para dar baixa e rastrear insumos.
-              </p>
-            )}
+        <div className="p-3 rounded-md bg-muted/30 border border-muted text-xs text-muted-foreground flex items-start gap-2">
+          <Info className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+          <div>
+            <strong>Regras de Estoque (V15-V18 & Consumo Parcial):</strong> Lotes vencidos são bloqueados. Unidades reutilizáveis ficam vinculadas ao mesmo cliente, e produtos controlados por quantidade permitem baixa parcial/fracionada até o esgotamento do lote.
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="py-8 text-center text-muted-foreground text-sm">
+            Carregando histórico de produtos utilizados...
+          </div>
+        ) : usages.length === 0 ? (
+          <div className="py-8 text-center border rounded-md border-dashed text-muted-foreground text-sm">
+            Nenhum produto ou insumo registrado neste atendimento.
           </div>
         ) : (
           <div className="rounded-md border overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Código / Serial</TableHead>
+                  <TableHead>Identificação (Serial / Lote)</TableHead>
                   <TableHead>Produto</TableHead>
-                  <TableHead>Tipo de Uso</TableHead>
-                  <TableHead>Procedimento Vinculado</TableHead>
+                  <TableHead>Quantidade</TableHead>
+                  <TableHead>Tipo / Status</TableHead>
+                  <TableHead>Procedimento</TableHead>
                   <TableHead>Data / Hora</TableHead>
-                  <TableHead>Observações</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {usages.map((u) => {
-                  const isReusable = u.stockUnit.lot?.product?.isReusable;
+                  const isReusable = u.isReusable ?? u.stockUnit?.lot?.product?.isReusable;
+                  const serialOrLot =
+                    u.codigoSerial ?? u.stockUnit?.codigoSerial ?? (u.numeroLote ? `Lote: ${u.numeroLote}` : 'Consumo Parcial');
+                  const prodName = u.productName ?? u.stockUnit?.lot?.product?.nome ?? 'Produto';
+                  const procName = u.procedureName ?? u.attendanceProcedure?.procedure?.nome ?? '—';
+                  const isReversed = u.status === 'Estornado';
+
                   return (
-                    <TableRow key={u.id}>
+                    <TableRow key={u.id} className={isReversed ? 'opacity-50' : ''}>
                       <TableCell className="font-mono text-xs font-semibold">
                         <span className="flex items-center gap-1.5">
                           <QrCode className="h-3.5 w-3.5 text-muted-foreground" />
-                          {u.stockUnit.codigoSerial}
+                          {serialOrLot}
                         </span>
                       </TableCell>
-                      <TableCell className="font-medium">
-                        {u.stockUnit.lot?.product?.nome}
+                      <TableCell className="font-medium">{prodName}</TableCell>
+                      <TableCell className="text-xs font-semibold">
+                        {u.quantidade ?? 1} {u.unidade || 'un'}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={isReusable ? 'secondary' : 'outline'} className="text-xs">
-                          {isReusable ? 'Reutilizável (Mesmo Cliente)' : 'Descartável'}
-                        </Badge>
+                        {isReversed ? (
+                          <Badge variant="destructive" className="text-xs">
+                            Estornado
+                          </Badge>
+                        ) : (
+                          <Badge variant={isReusable ? 'secondary' : 'outline'} className="text-xs">
+                            {isReusable ? 'Reutilizável (Mesmo Cliente)' : u.stockUnitId ? 'Unidade' : 'Parcial'}
+                          </Badge>
+                        )}
                       </TableCell>
-                      <TableCell className="text-muted-foreground text-xs">
-                        {u.attendanceProcedure?.procedure?.nome || '—'}
-                      </TableCell>
+                      <TableCell className="text-muted-foreground text-xs">{procName}</TableCell>
                       <TableCell className="text-xs whitespace-nowrap">
                         {formatDateTime(new Date(u.dataHora))}
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground max-w-xs truncate">
-                        {u.observacoes || '—'}
+                      <TableCell className="text-right">
+                        {!isReversed && !isCanceled && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => handleReverseUsage(u.id)}
+                            title="Estornar consumo e devolver ao estoque"
+                          >
+                            <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                            Estornar
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   );
@@ -283,11 +382,11 @@ export function AttendanceProductUsagesSection({
 
       {/* Modal: Record Product Usage */}
       <Dialog open={showRecordDialog} onOpenChange={setShowRecordDialog}>
-        <DialogContent className="sm:max-w-[450px]">
+        <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
-            <DialogTitle>Registrar Uso de Unidade Física</DialogTitle>
+            <DialogTitle>Registrar Consumo de Produto</DialogTitle>
             <DialogDescription>
-              Selecione a unidade rastreável em estoque. Unidades reutilizáveis são restritas ao mesmo cliente.
+              Escolha entre consumir uma unidade física rastreada por serial ou lançar consumo parcial por quantidade.
             </DialogDescription>
           </DialogHeader>
 
@@ -299,31 +398,81 @@ export function AttendanceProductUsagesSection({
           )}
 
           <form onSubmit={handleRecordUsage} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="unit-select">Unidade de Estoque Disponível *</Label>
-              <Select value={selectedUnitId} onValueChange={setSelectedUnitId}>
-                <SelectTrigger id="unit-select">
-                  <SelectValue placeholder="Selecione por código serial..." />
-                </SelectTrigger>
-                <SelectContent className="max-h-56">
-                  {availableUnits.length === 0 ? (
-                    <div className="p-2 text-xs text-muted-foreground text-center">
-                      Nenhuma unidade disponível em estoque para este cliente.
-                    </div>
-                  ) : (
-                    availableUnits.map((unit) => {
-                      const prodName = unit.lot?.product?.nome || 'Produto';
-                      const isReusable = unit.lot?.product?.isReusable;
-                      return (
-                        <SelectItem key={unit.id} value={unit.id}>
-                          {unit.codigoSerial} — {prodName} {isReusable ? '(Reutilizável)' : ''}
-                        </SelectItem>
-                      );
-                    })
-                  )}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant={mode === 'UNIT' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setMode('UNIT')}
+              >
+                Unidade Física (Serial)
+              </Button>
+              <Button
+                type="button"
+                variant={mode === 'QUANTITY' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setMode('QUANTITY')}
+              >
+                Consumo Parcial (Qtd)
+              </Button>
             </div>
+
+            {mode === 'UNIT' ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="unit-select">Unidade de Estoque Disponível *</Label>
+                <Select value={selectedUnitId} onValueChange={setSelectedUnitId}>
+                  <SelectTrigger id="unit-select">
+                    <SelectValue placeholder="Selecione por código serial..." />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    {availableUnits.length === 0 ? (
+                      <div className="p-2 text-xs text-muted-foreground text-center">
+                        Nenhuma unidade disponível em estoque para este cliente.
+                      </div>
+                    ) : (
+                      availableUnits.map((unit) => {
+                        const prodName = unit.productName || unit.lot?.product?.nome || 'Produto';
+                        const isReusable = unit.isReusable ?? unit.lot?.product?.isReusable;
+                        return (
+                          <SelectItem key={unit.id} value={unit.id}>
+                            {unit.codigoSerial} — {prodName} {isReusable ? '(Reutilizável)' : ''}
+                          </SelectItem>
+                        );
+                      })
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2 space-y-1.5">
+                  <Label>Produto Consumível *</Label>
+                  <Select value={selectedProductId} onValueChange={setSelectedProductId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o produto..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {quantityProducts.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.nome} (Saldo: {p.totalQuantityAvailable} {p.unidade})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Quantidade *</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    required
+                    value={consumeQuantity}
+                    onChange={(e) => setConsumeQuantity(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label htmlFor="proc-assoc-select">Procedimento Vinculado (Opcional)</Label>
@@ -360,8 +509,9 @@ export function AttendanceProductUsagesSection({
               <Button type="button" variant="outline" onClick={() => setShowRecordDialog(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={loading || !selectedUnitId}>
-                {loading ? 'Registrando...' : 'Confirmar Uso'}
+              <Button type="submit" disabled={actionLoading}>
+                <ShieldCheck className="h-4 w-4 mr-1.5" />
+                {actionLoading ? 'Validando...' : 'Confirmar Consumo'}
               </Button>
             </DialogFooter>
           </form>

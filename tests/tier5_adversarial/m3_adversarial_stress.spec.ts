@@ -19,39 +19,48 @@ describe('Tier 5 Adversarial Stress Suite: Milestone 3 Invariants (Challenger M3
   // Challenge 1: D1 State Machine & Multi-Attendance Cascades
   // -------------------------------------------------------------
   describe('D1 & V07 Invariants: Lifecycle & Cascades', () => {
-    it('D1.1: Cancelling appointment with both Realizado and Pendente attendances only cancels Pendente (D1 Rule 5)', async () => {
+    it('D1.1: Cancelling appointment cancels Pendente attendance, preserves Realizado attendance (D1 Rule 5), and enforces 1:1 relationship', async () => {
       const client = await createTestClient();
-      const appt = await AppointmentService.createAppointment({
+      const appt1 = await AppointmentService.createAppointment({
         clientId: client.id,
         dataHora: new Date(Date.now() + 86400000),
       });
 
-      const initialPendingAtt = appt.attendances[0];
+      const initialAtt = appt1.attendances[0];
       // Mark initial attendance as Realizado
-      await AttendanceService.completeAttendance(initialPendingAtt.id);
+      await AttendanceService.completeAttendance(initialAtt.id);
 
-      // Create a second attendance on same appointment (1:N cardinality)
-      const secondAtt = await AttendanceService.createAttendance({
-        appointmentId: appt.id,
-        clientId: client.id,
-        observacoes: 'Sessão adicional de retorno',
-      });
-      expect(secondAtt.status).toBe('Pendente');
+      // 1:1 cardinality: Attempting to create a second attendance on same appointment must throw ConflictError
+      await expect(
+        AttendanceService.createAttendance({
+          appointmentId: appt1.id,
+          clientId: client.id,
+          observacoes: 'Sessão adicional de retorno',
+        })
+      ).rejects.toThrow(ConflictError);
 
-      // Now cancel the appointment
-      await AppointmentService.cancelAppointment(appt.id, {
+      // Cancel appt1 -> Realizado attendance remains intact
+      await AppointmentService.cancelAppointment(appt1.id, {
         motivoCancelamento: 'Cliente desmarcou sessões futuras',
       });
 
-      // Assert: Realizado attendance remains intact
       const reloadedFirst = await (prismaTest as any).attendance.findUnique({
-        where: { id: initialPendingAtt.id },
+        where: { id: initialAtt.id },
       });
       expect(reloadedFirst.status).toBe('Realizado');
 
-      // Assert: Second pending attendance was cancelled
+      // Separate appointment with Pendente attendance -> cancelled on appointment cancellation
+      const appt2 = await AppointmentService.createAppointment({
+        clientId: client.id,
+        dataHora: new Date(Date.now() + 172800000),
+      });
+      const pendingAtt = appt2.attendances[0];
+      await AppointmentService.cancelAppointment(appt2.id, {
+        motivoCancelamento: 'Cancelamento de agendamento pendente',
+      });
+
       const reloadedSecond = await (prismaTest as any).attendance.findUnique({
-        where: { id: secondAtt.id },
+        where: { id: pendingAtt.id },
       });
       expect(reloadedSecond.status).toBe('Cancelado');
     });

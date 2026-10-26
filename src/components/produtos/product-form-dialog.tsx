@@ -22,6 +22,8 @@ export interface ProductFormData {
   categoria?: string | null;
   marca?: string | null;
   unidade: string;
+  trackingMode?: 'UNIT' | 'QUANTITY';
+  estoqueMinimo?: number;
   descricao?: string | null;
   isReusable: boolean;
   isActive: boolean;
@@ -54,7 +56,9 @@ const COMMON_UNITS = [
   'Unidade',
   'Envelope',
   'Pacote',
-  'Mililitro (ml)',
+  'ml',
+  'g',
+  'aplicacoes',
 ];
 
 export function ProductFormDialog({
@@ -69,6 +73,8 @@ export function ProductFormDialog({
   const [categoria, setCategoria] = useState('');
   const [marca, setMarca] = useState('');
   const [unidade, setUnidade] = useState('Frasco');
+  const [trackingMode, setTrackingMode] = useState<'UNIT' | 'QUANTITY'>('UNIT');
+  const [estoqueMinimo, setEstoqueMinimo] = useState('5');
   const [descricao, setDescricao] = useState('');
   const [isReusable, setIsReusable] = useState(false);
   const [isActive, setIsActive] = useState(true);
@@ -82,6 +88,8 @@ export function ProductFormDialog({
       setCategoria(product.categoria || '');
       setMarca(product.marca || '');
       setUnidade(product.unidade || 'Frasco');
+      setTrackingMode(product.trackingMode || 'UNIT');
+      setEstoqueMinimo(String(product.estoqueMinimo ?? 5));
       setDescricao(product.descricao || '');
       setIsReusable(Boolean(product.isReusable));
       setIsActive(product.isActive !== false);
@@ -90,6 +98,8 @@ export function ProductFormDialog({
       setCategoria('Toxinas');
       setMarca('');
       setUnidade('Frasco');
+      setTrackingMode('UNIT');
+      setEstoqueMinimo('5');
       setDescricao('');
       setIsReusable(false);
       setIsActive(true);
@@ -119,6 +129,8 @@ export function ProductFormDialog({
         categoria: categoria.trim() || null,
         marca: marca.trim() || null,
         unidade: unidade.trim(),
+        trackingMode,
+        estoqueMinimo: Number(estoqueMinimo) || 0,
         descricao: descricao.trim() || null,
         isReusable,
         isActive,
@@ -175,7 +187,7 @@ export function ProductFormDialog({
               id="prod-nome"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
-              placeholder="Ex: Botox 100U, Restylane Lyft"
+              placeholder="Ex: Botox 100U, Restylane Lyft, Creme Anestésico"
               required
             />
           </div>
@@ -208,16 +220,32 @@ export function ProductFormDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="space-y-1">
+              <Label>Modo de Rastreio</Label>
+              <Select
+                value={trackingMode}
+                onValueChange={(v) => setTrackingMode(v as 'UNIT' | 'QUANTITY')}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="UNIT">Unidade Física (Serial)</SelectItem>
+                  <SelectItem value="QUANTITY">Quantidade Fracionável</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-1">
               <Label htmlFor="prod-unidade">
-                Unidade de Medida <span className="text-destructive">*</span>
+                Unidade <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="prod-unidade"
                 value={unidade}
                 onChange={(e) => setUnidade(e.target.value)}
-                placeholder="Ex: Frasco, Ampola, Seringa"
+                placeholder="Ex: Frasco, ml, g"
                 list="unit-suggestions"
                 required
               />
@@ -229,23 +257,40 @@ export function ProductFormDialog({
             </div>
 
             <div className="space-y-1">
-              <Label>Classificação de Reuso (§15)</Label>
-              <div className="pt-1">
-                <Button
-                  type="button"
-                  variant={isReusable ? 'default' : 'outline'}
-                  size="sm"
-                  className="w-full text-xs"
-                  onClick={() => setIsReusable(!isReusable)}
-                >
-                  {isReusable ? 'Reutilizável (Mesmo Cliente)' : 'Uso Único (Descarte)'}
-                </Button>
-              </div>
+              <Label htmlFor="prod-min">Estoque Mín.</Label>
+              <Input
+                id="prod-min"
+                type="number"
+                step="0.1"
+                min="0"
+                value={estoqueMinimo}
+                onChange={(e) => setEstoqueMinimo(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <Label>Classificação de Reuso (§15)</Label>
+            <div className="pt-1">
+              <Button
+                type="button"
+                variant={isReusable ? 'default' : 'outline'}
+                size="sm"
+                className="w-full text-xs"
+                onClick={() => setIsReusable(!isReusable)}
+              >
+                {isReusable ? 'Reutilizável (Mesmo Cliente)' : 'Uso Único / Consumível'}
+              </Button>
             </div>
           </div>
 
           <div className="p-3 border rounded-lg bg-muted/20 text-xs text-muted-foreground">
-            {isReusable ? (
+            {trackingMode === 'QUANTITY' ? (
+              <p>
+                <strong>Consumo Parcial / Quantitativo:</strong> O saldo do lote é controlado em{' '}
+                <strong>{unidade || 'unidades'}</strong>, permitindo consumo parcial/fracionado em múltiplos atendimentos até esgotamento.
+              </p>
+            ) : isReusable ? (
               <p>
                 <strong>Regra de Reutilização:</strong> Cada frasco ou unidade física terá código serial
                 individual e, após a primeira aplicação, ficará vinculado exclusivamente àquele paciente (V16).

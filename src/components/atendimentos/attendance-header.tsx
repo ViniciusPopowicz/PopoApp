@@ -21,7 +21,7 @@ interface AttendanceHeaderProps {
     id: string;
     dataHora: string;
     status: 'Pendente' | 'Realizado' | 'Cancelado';
-    appointmentId: string;
+    appointmentId: string | null;
     client: {
       id: string;
       nome: string;

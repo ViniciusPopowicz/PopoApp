@@ -12,6 +12,17 @@ export const PAYMENT_METHODS = [
 
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
+export const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  CartaoCredito: 'Cartão de Crédito',
+  Pix: 'PIX',
+  pix_parcelado: 'PIX Parcelado',
+  Dinheiro: 'Dinheiro',
+  CartaoDebito: 'Cartão de Débito',
+  Boleto: 'Boleto',
+  Transferencia: 'Transferência',
+  Outro: 'Outro',
+};
+
 export const PAYMENT_STATUSES = [
   'Pago',
   'Pendente',

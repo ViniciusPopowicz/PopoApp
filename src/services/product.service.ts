@@ -6,20 +6,27 @@ import {
   UpdateProductInput,
   ProductQueryInput,
 } from '@/schemas/product';
-import { ProductSummaryDto, ProductDetailDto } from '@/types/product';
+import { ProductSummaryDto, ProductDetailDto, ProductTrackingMode } from '@/types/product';
 
 export function mapProductSummary(p: any): ProductSummaryDto {
   let totalUnits = 0;
   let availableUnits = 0;
+  let totalQuantityAvailable = 0;
 
   if (p.lots) {
     for (const lot of p.lots) {
+      totalQuantityAvailable += Number(lot.quantidadeDisponivel ?? 0);
       if (lot.stockUnits) {
         totalUnits += lot.stockUnits.length;
         availableUnits += lot.stockUnits.filter((u: any) => u.status === 'Disponivel').length;
       }
     }
   }
+
+  const trackingMode = (p.trackingMode || 'UNIT') as ProductTrackingMode;
+  const estoqueMinimo = Number(p.estoqueMinimo ?? 0);
+  const effectiveStock = trackingMode === 'QUANTITY' ? totalQuantityAvailable : availableUnits;
+  const lowThreshold = estoqueMinimo > 0 ? estoqueMinimo : 5;
 
   return {
     id: p.id,
@@ -28,6 +35,8 @@ export function mapProductSummary(p: any): ProductSummaryDto {
     marca: p.marca,
     descricao: p.descricao,
     unidade: p.unidade,
+    trackingMode,
+    estoqueMinimo,
     isReusable: p.isReusable,
     isActive: p.isActive,
     createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : String(p.createdAt),
@@ -35,7 +44,8 @@ export function mapProductSummary(p: any): ProductSummaryDto {
     lotsCount: p._count?.lots ?? p.lots?.length ?? 0,
     totalUnitsCount: totalUnits,
     availableUnitsCount: availableUnits,
-    isLowStock: availableUnits <= 5,
+    totalQuantityAvailable: Number(totalQuantityAvailable.toFixed(3)),
+    isLowStock: effectiveStock <= lowThreshold,
   };
 }
 
@@ -51,6 +61,7 @@ export async function listProducts(query: ProductQueryInput = {}): Promise<Produ
         }
       : {}),
     ...(query.categoria ? { categoria: query.categoria } : {}),
+    ...(query.trackingMode ? { trackingMode: query.trackingMode } : {}),
     ...(query.isReusable !== undefined ? { isReusable: query.isReusable } : {}),
     ...(query.active !== undefined ? { isActive: query.active } : {}),
   };
@@ -64,6 +75,8 @@ export async function listProducts(query: ProductQueryInput = {}): Promise<Produ
       },
       lots: {
         select: {
+          quantidadeInicial: true,
+          quantidadeDisponivel: true,
           stockUnits: {
             select: { status: true },
           },
@@ -114,6 +127,10 @@ export async function getProductById(id: string): Promise<ProductDetailDto> {
       dataValidade: lot.dataValidade ? lot.dataValidade.toISOString() : null,
       dataAquisicao: lot.dataAquisicao ? lot.dataAquisicao.toISOString() : null,
       precoCusto: lot.precoCusto ? Number(lot.precoCusto) : null,
+      quantidadeInicial: Number(lot.quantidadeInicial ?? units.length),
+      quantidadeDisponivel: Number(
+        lot.quantidadeDisponivel ?? units.filter((u) => u.status === 'Disponivel').length
+      ),
       observacoes: lot.observacoes,
       isExpired,
       totalUnitsCount: units.length,
@@ -149,6 +166,8 @@ export async function createProduct(input: CreateProductInput): Promise<ProductS
       marca: input.marca ?? null,
       descricao: input.descricao ?? null,
       unidade: input.unidade,
+      trackingMode: input.trackingMode ?? 'UNIT',
+      estoqueMinimo: new Prisma.Decimal(input.estoqueMinimo ?? 0),
       isReusable,
       isActive,
       ...(input.procedureIds && input.procedureIds.length > 0
@@ -223,6 +242,10 @@ export async function updateProduct(id: string, input: UpdateProductInput): Prom
         ...(input.marca !== undefined ? { marca: input.marca } : {}),
         ...(input.descricao !== undefined ? { descricao: input.descricao } : {}),
         ...(input.unidade ? { unidade: input.unidade } : {}),
+        ...(input.trackingMode ? { trackingMode: input.trackingMode } : {}),
+        ...(input.estoqueMinimo !== undefined
+          ? { estoqueMinimo: new Prisma.Decimal(input.estoqueMinimo) }
+          : {}),
         ...(targetReusable !== undefined ? { isReusable: targetReusable } : {}),
         ...(isActive !== undefined ? { isActive } : {}),
       },
@@ -230,6 +253,8 @@ export async function updateProduct(id: string, input: UpdateProductInput): Prom
         _count: { select: { lots: true } },
         lots: {
           select: {
+            quantidadeInicial: true,
+            quantidadeDisponivel: true,
             stockUnits: { select: { status: true } },
           },
         },
@@ -244,7 +269,7 @@ export async function deleteProduct(id: string): Promise<{ success: boolean; dea
   const product = await prisma.product.findUnique({
     where: { id },
     include: {
-      _count: { select: { lots: true } },
+      _count: { select: { lots: true, inventoryMovements: true } },
     },
   });
 
@@ -252,7 +277,7 @@ export async function deleteProduct(id: string): Promise<{ success: boolean; dea
     throw new NotFoundError('Produto não encontrado');
   }
 
-  if (product._count.lots > 0) {
+  if (product._count.lots > 0 || product._count.inventoryMovements > 0) {
     // Soft-deactivate to protect historical traceability (Dev Spec §30)
     await prisma.product.update({
       where: { id },

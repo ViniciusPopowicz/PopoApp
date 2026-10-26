@@ -12,8 +12,19 @@ import {
 import { PROHIBITED_APPOINTMENT_STATUSES } from '@/types/appointment';
 
 export class AppointmentService {
+  private static withCompatAttendances<T>(
+    appt: T
+  ): T & { attendance: any; attendances: any[]; plannedProcedures?: any[] } {
+    return {
+      ...(appt as any),
+      attendance: (appt as any)?.attendance ?? null,
+      attendances: (appt as any)?.attendance ? [(appt as any).attendance] : [],
+      plannedProcedures: (appt as any)?.plannedProcedures ?? [],
+    };
+  }
+
   /**
-   * Creates an Appointment and automatically creates a linked Attendance in status 'Pendente' (D1, V07).
+   * Creates an Appointment and automatically creates its single linked Attendance in status 'Pendente' (1:1, D1, V07).
    * Supports planned procedures (D3).
    */
   static async createAppointment(data: CreateAppointmentInput) {
@@ -63,7 +74,7 @@ export class AppointmentService {
       }
     }
 
-    // 3. Execute atomic transaction (Appointment + PlannedProcedures + Attendance [Pendente])
+    // 3. Execute atomic transaction (Appointment + PlannedProcedures + 1:1 Attendance [Pendente])
     return await prisma.$transaction(async (tx) => {
       const appointment = await tx.appointment.create({
         data: {
@@ -78,7 +89,7 @@ export class AppointmentService {
               ordem: p.ordem,
             })),
           },
-          attendances: {
+          attendance: {
             create: {
               clientId: data.clientId,
               status: 'Pendente', // CRITICAL D1: Always starts as Pendente, never Realizado
@@ -105,11 +116,11 @@ export class AppointmentService {
             include: { procedure: { select: { id: true, nome: true, duracaoMinutos: true, valorPadrao: true } } },
             orderBy: { ordem: 'asc' },
           },
-          attendances: true,
+          attendance: true,
         },
       });
 
-      return appointment;
+      return this.withCompatAttendances(appointment);
     });
   }
 
@@ -125,10 +136,12 @@ export class AppointmentService {
           include: { procedure: true },
           orderBy: { ordem: 'asc' },
         },
-        attendances: {
+        attendance: {
           include: {
             procedures: { include: { procedure: true } },
-            payments: true,
+            payments: {
+              include: { pixInstallments: true },
+            },
           },
         },
         rescheduledFrom: { select: { id: true, dataHora: true, status: true } },
@@ -140,7 +153,7 @@ export class AppointmentService {
       throw new NotFoundError('Agendamento não encontrado');
     }
 
-    return appointment;
+    return this.withCompatAttendances(appointment);
   }
 
   /**
@@ -164,7 +177,7 @@ export class AppointmentService {
     const limit = query.limit ?? 50;
     const skip = (page - 1) * limit;
 
-    const [total, items] = await Promise.all([
+    const [total, rawItems] = await Promise.all([
       prisma.appointment.count({ where }),
       prisma.appointment.findMany({
         where,
@@ -177,12 +190,14 @@ export class AppointmentService {
             include: { procedure: { select: { id: true, nome: true, duracaoMinutos: true } } },
             orderBy: { ordem: 'asc' },
           },
-          attendances: {
+          attendance: {
             select: { id: true, status: true, completedAt: true },
           },
         },
       }),
     ]);
+
+    const items = rawItems.map((item) => this.withCompatAttendances(item));
 
     return {
       items,
@@ -209,7 +224,7 @@ export class AppointmentService {
       throw new ValidationError('Status de agendamento inválido. "Em atendimento" não é permitido.');
     }
 
-    return await prisma.appointment.update({
+    const updated = await prisma.appointment.update({
       where: { id },
       data: {
         ...(input.dataHora ? { dataHora: input.dataHora } : {}),
@@ -222,9 +237,11 @@ export class AppointmentService {
       include: {
         client: true,
         plannedProcedures: { include: { procedure: true } },
-        attendances: true,
+        attendance: true,
       },
     });
+
+    return this.withCompatAttendances(updated);
   }
 
   /**
@@ -233,7 +250,7 @@ export class AppointmentService {
   static async confirmAppointment(id: string) {
     const appointment = await prisma.appointment.findUnique({
       where: { id },
-      select: { id: true, status: true },
+      include: { client: true, attendance: true },
     });
 
     if (!appointment) {
@@ -241,23 +258,25 @@ export class AppointmentService {
     }
 
     if (appointment.status === 'Confirmado') {
-      return appointment; // Idempotent
+      return this.withCompatAttendances(appointment); // Idempotent
     }
 
     if (appointment.status !== 'Agendado') {
       throw new ValidationError(`Não é possível confirmar um agendamento com status "${appointment.status}"`);
     }
 
-    return await prisma.appointment.update({
+    const updated = await prisma.appointment.update({
       where: { id },
       data: { status: 'Confirmado' },
-      include: { client: true, attendances: true },
+      include: { client: true, attendance: true },
     });
+
+    return this.withCompatAttendances(updated);
   }
 
   /**
-   * Cancels an appointment and automatically cascades status 'Cancelado' to all linked pending attendances (D1 Rule 2).
-   * Attendances already 'Realizado' are left intact (D1 Rule 5).
+   * Cancels an appointment and automatically cascades status 'Cancelado' to its linked pending attendance (D1 Rule 2).
+   * Attendance already 'Realizado' is left intact (D1 Rule 5).
    */
   static async cancelAppointment(id: string, input: CancelAppointmentInput) {
     const appointment = await prisma.appointment.findUnique({
@@ -283,7 +302,15 @@ export class AppointmentService {
         },
       });
 
-      // 2. Cascade Cancelado to pending attendances ONLY (D1 Rule 2 & 5)
+      // 2. Cascade Cancelado to pending attendance ONLY (D1 Rule 2 & 5)
+      const pendingAtt = await tx.attendance.findFirst({
+        where: {
+          appointmentId: id,
+          status: 'Pendente',
+        },
+        select: { id: true },
+      });
+
       await tx.attendance.updateMany({
         where: {
           appointmentId: id,
@@ -294,12 +321,40 @@ export class AppointmentService {
         },
       });
 
+      const reminderOrConditions: Prisma.ReminderWhereInput[] = [{ appointmentId: id }];
+      const recurrenceOrConditions: Prisma.ReminderRecurrenceWhereInput[] = [{ appointmentId: id }];
+      if (pendingAtt) {
+        reminderOrConditions.push({ attendanceId: pendingAtt.id });
+        recurrenceOrConditions.push({ attendanceId: pendingAtt.id });
+      }
+
+      // 3. Dismiss pending reminders and deactivate recurrences tied to this cancelled appointment or its cancelled pending attendance
+      await tx.reminder.updateMany({
+        where: {
+          OR: reminderOrConditions,
+          status: { in: ['pendente', 'Pendente'] },
+        },
+        data: {
+          status: 'dispensado',
+        },
+      });
+      await tx.reminderRecurrence.updateMany({
+        where: {
+          OR: recurrenceOrConditions,
+          isActive: true,
+        },
+        data: {
+          isActive: false,
+          proximaOcorrenciaEm: null,
+        },
+      });
+
       return updated;
     });
   }
 
   /**
-   * Marks an appointment as 'Não compareceu' (no-show) and cascades status 'Cancelado' to pending attendances (D1 Rule 3).
+   * Marks an appointment as 'Não compareceu' (no-show) and cascades status 'Cancelado' to its pending attendance (D1 Rule 3).
    */
   static async markNoShow(id: string, input?: NoShowAppointmentInput) {
     const appointment = await prisma.appointment.findUnique({
@@ -328,7 +383,15 @@ export class AppointmentService {
         },
       });
 
-      // Cascade Cancelado to pending attendances ONLY
+      const pendingAtt = await tx.attendance.findFirst({
+        where: {
+          appointmentId: id,
+          status: 'Pendente',
+        },
+        select: { id: true },
+      });
+
+      // Cascade Cancelado to pending attendance ONLY
       await tx.attendance.updateMany({
         where: {
           appointmentId: id,
@@ -339,6 +402,34 @@ export class AppointmentService {
         },
       });
 
+      const reminderOrConditions: Prisma.ReminderWhereInput[] = [{ appointmentId: id }];
+      const recurrenceOrConditions: Prisma.ReminderRecurrenceWhereInput[] = [{ appointmentId: id }];
+      if (pendingAtt) {
+        reminderOrConditions.push({ attendanceId: pendingAtt.id });
+        recurrenceOrConditions.push({ attendanceId: pendingAtt.id });
+      }
+
+      // Dismiss pending reminders and deactivate recurrences tied to this no-show appointment or its cancelled pending attendance
+      await tx.reminder.updateMany({
+        where: {
+          OR: reminderOrConditions,
+          status: { in: ['pendente', 'Pendente'] },
+        },
+        data: {
+          status: 'dispensado',
+        },
+      });
+      await tx.reminderRecurrence.updateMany({
+        where: {
+          OR: recurrenceOrConditions,
+          isActive: true,
+        },
+        data: {
+          isActive: false,
+          proximaOcorrenciaEm: null,
+        },
+      });
+
       return updated;
     });
   }
@@ -346,16 +437,16 @@ export class AppointmentService {
   /**
    * Reschedules an appointment atomically (D1 Rule 4, V04):
    * 1. Marks current appointment as 'Reagendado' and sets rescheduledToId to new appointment.
-   * 2. Sets pending attendances of old appointment to 'Cancelado'.
+   * 2. Sets pending attendance of old appointment to 'Cancelado'.
    * 3. Creates new Appointment with status 'Agendado' and rescheduledFromId pointing to old appointment.
-   * 4. Creates a new linked Attendance with status 'Pendente'.
+   * 4. Creates a new linked 1:1 Attendance with status 'Pendente'.
    */
   static async rescheduleAppointment(id: string, input: RescheduleAppointmentInput) {
     const oldAppt = await prisma.appointment.findUnique({
       where: { id },
       include: {
         plannedProcedures: true,
-        attendances: { where: { status: 'Pendente' } },
+        attendance: true,
       },
     });
 
@@ -371,7 +462,7 @@ export class AppointmentService {
     const plannedProcIds = input.plannedProcedureIds ?? oldAppt.plannedProcedures.map((p) => p.procedureId);
 
     return await prisma.$transaction(async (tx) => {
-      // 1. Create new Appointment with status 'Agendado'
+      // 1. Create new Appointment with status 'Agendado' and its 1:1 Attendance
       const newAppt = await tx.appointment.create({
         data: {
           clientId: oldAppt.clientId,
@@ -391,7 +482,7 @@ export class AppointmentService {
               ordem: index,
             })),
           },
-          attendances: {
+          attendance: {
             create: {
               clientId: oldAppt.clientId,
               status: 'Pendente', // New pending attendance for new appointment (D1 Rule 4)
@@ -403,7 +494,7 @@ export class AppointmentService {
         },
         include: {
           client: true,
-          attendances: true,
+          attendance: true,
           plannedProcedures: { include: { procedure: true } },
         },
       });
@@ -417,7 +508,7 @@ export class AppointmentService {
         },
       });
 
-      // 3. Cancel old pending attendances (D1 Rule 4)
+      // 3. Cancel old pending attendance (D1 Rule 4)
       await tx.attendance.updateMany({
         where: {
           appointmentId: oldAppt.id,
@@ -428,7 +519,35 @@ export class AppointmentService {
         },
       });
 
-      return newAppt;
+      // 4. Dismiss pending reminders and deactivate recurrences tied to the old appointment or its cancelled pending attendance
+      const reminderOrConditions: Prisma.ReminderWhereInput[] = [{ appointmentId: oldAppt.id }];
+      const recurrenceOrConditions: Prisma.ReminderRecurrenceWhereInput[] = [{ appointmentId: oldAppt.id }];
+      if (oldAppt.attendance && oldAppt.attendance.status === 'Pendente') {
+        reminderOrConditions.push({ attendanceId: oldAppt.attendance.id });
+        recurrenceOrConditions.push({ attendanceId: oldAppt.attendance.id });
+      }
+
+      await tx.reminder.updateMany({
+        where: {
+          OR: reminderOrConditions,
+          status: { in: ['pendente', 'Pendente'] },
+        },
+        data: {
+          status: 'dispensado',
+        },
+      });
+      await tx.reminderRecurrence.updateMany({
+        where: {
+          OR: recurrenceOrConditions,
+          isActive: true,
+        },
+        data: {
+          isActive: false,
+          proximaOcorrenciaEm: null,
+        },
+      });
+
+      return this.withCompatAttendances(newAppt);
     });
   }
 
@@ -440,9 +559,8 @@ export class AppointmentService {
     const appointment = await prisma.appointment.findUnique({
       where: { id },
       include: {
-        attendances: {
-          select: { id: true, status: true },
-        },
+        client: true,
+        attendance: true,
       },
     });
 
@@ -451,32 +569,27 @@ export class AppointmentService {
     }
 
     if (appointment.status === 'Concluído') {
-      return appointment; // Idempotent
+      return this.withCompatAttendances(appointment); // Idempotent
     }
 
     if (['Cancelado', 'Não compareceu', 'Reagendado'].includes(appointment.status)) {
       throw new ValidationError(`Não é possível concluir um agendamento com status "${appointment.status}"`);
     }
 
-    // Validation V08 Guard: At least one attendance must be 'Realizado'
-    const hasRealizado = appointment.attendances.some((att) => att.status === 'Realizado');
-    if (!hasRealizado) {
+    // Validation V08 Guard: The 1:1 attendance must exist and be 'Realizado'
+    if (!appointment.attendance || appointment.attendance.status !== 'Realizado') {
       throw new ValidationError('Não é possível concluir o agendamento sem que o atendimento esteja realizado');
     }
 
-    // Check if there are still lingering 'Pendente' attendances
-    const hasPending = appointment.attendances.some((att) => att.status === 'Pendente');
-    if (hasPending) {
-      throw new ValidationError('Existem atendimentos pendentes vinculados a este agendamento');
-    }
-
-    return await prisma.appointment.update({
+    const updated = await prisma.appointment.update({
       where: { id },
       data: { status: 'Concluído' },
       include: {
         client: true,
-        attendances: true,
+        attendance: true,
       },
     });
+
+    return this.withCompatAttendances(updated);
   }
 }

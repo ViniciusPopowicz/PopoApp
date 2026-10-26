@@ -191,6 +191,10 @@ DATABASE_URL="sqlserver://localhost:1433;database=PopoApp;integratedSecurity=tru
 #   Ou use: https://generate-secret.vercel.app/32
 SESSION_SECRET="sua-chave-secreta-com-pelo-menos-32-caracteres"
 
+# Segredo opcional para disparo agendado (cron/scheduler) de lembretes recorrentes
+# Endpoint: POST ou GET /api/reminders/process-due (header x-cron-secret ou Authorization: Bearer <CRON_SECRET>)
+CRON_SECRET="segredo-para-processamento-agendado-de-lembretes"
+
 # Ambiente de desenvolvimento
 NODE_ENV="development"
 ```

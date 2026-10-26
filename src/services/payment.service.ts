@@ -114,22 +114,47 @@ export class PaymentService {
 
     const paymentStatus = input.status ?? 'Pago';
     const numeroParcelas = input.metodo === 'CartaoCredito' ? (input.numeroParcelas ?? 1) : 1;
+    const payDate = paymentStatus === 'Pago' ? (input.dataPagamento ?? new Date()) : null;
 
     // V21 constraint: Credit card payments store installment count but create ZERO PixInstallment and ZERO Reminder rows.
-    const createdPayment = await prisma.payment.create({
-      data: {
-        attendanceId,
-        valor: new Prisma.Decimal(input.valor),
-        metodo: input.metodo,
-        status: paymentStatus,
-        dataPagamento: paymentStatus === 'Pago' ? (input.dataPagamento ?? new Date()) : null,
-        numeroParcelas,
-        identificadorTransacao: input.identificadorTransacao ?? null,
-        observacoes: input.observacoes ?? null,
-      },
-      include: {
-        pixInstallments: true,
-      },
+    const createdPayment = await prisma.$transaction(async (tx) => {
+      const p = await tx.payment.create({
+        data: {
+          attendanceId,
+          valor: new Prisma.Decimal(input.valor),
+          metodo: input.metodo,
+          status: paymentStatus,
+          dataPagamento: payDate,
+          numeroParcelas,
+          identificadorTransacao: input.identificadorTransacao ?? null,
+          observacoes: input.observacoes ?? null,
+        },
+        include: {
+          pixInstallments: true,
+        },
+      });
+
+      if (paymentStatus === 'Pago') {
+        await tx.financialMovement.create({
+          data: {
+            tipo: 'ENTRADA',
+            origem: 'ATENDIMENTO',
+            descricao: 'Pagamento de atendimento clínico',
+            categoria: 'Atendimentos Clínicos',
+            valor: new Prisma.Decimal(input.valor),
+            dataMovimentacao: payDate ?? new Date(),
+            metodo: input.metodo,
+            status: 'Ativo',
+            clientId: attendance.clientId,
+            appointmentId: attendance.appointmentId ?? null,
+            attendanceId,
+            paymentId: p.id,
+            observacoes: input.observacoes ?? null,
+          },
+        });
+      }
+
+      return p;
     });
 
     // Recompute financials with new payment included
@@ -380,7 +405,7 @@ export class PaymentService {
       await tx.reminder.updateMany({
         where: {
           pixInstallmentId: installmentId,
-          status: 'pendente',
+          status: { in: ['pendente', 'Pendente'] },
         },
         data: {
           status: 'concluido',
@@ -388,7 +413,35 @@ export class PaymentService {
         },
       });
 
-      // 3. Check if all sibling installments are now Pago
+      // 3. Ensure FinancialMovement exists for this paid installment
+      const existingMov = await tx.financialMovement.findFirst({
+        where: { pixInstallmentId: installmentId, status: 'Ativo' },
+      });
+      if (!existingMov) {
+        const parentAtt = await tx.attendance.findUnique({
+          where: { id: installment.payment.attendanceId },
+          select: { clientId: true, appointmentId: true },
+        });
+        await tx.financialMovement.create({
+          data: {
+            tipo: 'ENTRADA',
+            origem: 'PARCELA_PIX',
+            descricao: `Parcela PIX ${installment.numeroParcela}/${installment.totalParcelas}`,
+            categoria: 'Atendimentos Clínicos',
+            valor: installment.valor,
+            dataMovimentacao: payDate,
+            metodo: 'pix_parcelado',
+            status: 'Ativo',
+            clientId: parentAtt?.clientId ?? null,
+            appointmentId: parentAtt?.appointmentId ?? null,
+            attendanceId: installment.payment.attendanceId,
+            paymentId: installment.paymentId,
+            pixInstallmentId: installmentId,
+          },
+        });
+      }
+
+      // 4. Check if all sibling installments are now Pago
       const allSiblings = await tx.pixInstallment.findMany({
         where: { paymentId: installment.paymentId },
       });
@@ -466,12 +519,62 @@ export class PaymentService {
         where: { id: installmentId },
         data: {
           status: input.status,
-          dataPagamento: input.status === 'Pago' ? (input.dataPagamento ?? new Date()) : null,
+          dataPagamento: null,
         },
       });
 
-      // If status reverted from Pago to Pendente/Atrasado, ensure parent payment is not 'Pago'
+      if (input.status === 'Cancelado') {
+        await tx.reminder.updateMany({
+          where: {
+            pixInstallmentId: installmentId,
+            status: { in: ['pendente', 'Pendente'] },
+          },
+          data: {
+            status: 'dispensado',
+          },
+        });
+      }
+
+      // If status reverted from Pago to non-Pago, reverse any active FinancialMovement and ensure parent payment is not 'Pago'
       if (input.status !== 'Pago') {
+        const activeMovs = await tx.financialMovement.findMany({
+          where: {
+            pixInstallmentId: installmentId,
+            status: 'Ativo',
+          },
+        });
+        const now = new Date();
+        const reason = `Alteração de status da parcela PIX para ${input.status}`;
+        for (const mov of activeMovs) {
+          await tx.financialMovement.update({
+            where: { id: mov.id },
+            data: {
+              status: 'Estornado',
+              reversedAt: now,
+              reversalReason: reason,
+            },
+          });
+          await tx.financialMovement.create({
+            data: {
+              tipo: mov.tipo === 'ENTRADA' ? 'SAIDA' : 'ENTRADA',
+              origem: 'ESTORNO',
+              descricao: `Estorno de ${mov.descricao}: ${reason}`,
+              categoria: mov.categoria,
+              valor: mov.valor,
+              dataMovimentacao: now,
+              metodo: mov.metodo,
+              status: 'Ativo',
+              clientId: mov.clientId,
+              appointmentId: mov.appointmentId,
+              attendanceId: mov.attendanceId,
+              paymentId: mov.paymentId,
+              pixInstallmentId: mov.pixInstallmentId,
+              reversedFromId: mov.id,
+              observacoes: reason,
+            },
+          });
+        }
+
         await tx.payment.update({
           where: { id: installment.paymentId },
           data: { status: 'Pendente' },
@@ -564,7 +667,8 @@ export class PaymentService {
   }
 
   /**
-   * Cancels a payment, cancelling all child PIX installments and dismissing linked reminders.
+   * Cancels a payment, cancelling all child PIX installments, dismissing linked reminders,
+   * and reversing any active FinancialMovement rows with an audit trail.
    */
   static async cancelPayment(paymentId: string): Promise<PaymentDto> {
     const payment = await this.getPaymentById(paymentId);
@@ -592,6 +696,39 @@ export class PaymentService {
         });
       }
 
+      // 4. Reverse any active FinancialMovement rows linked to this payment
+      const activeMovements = await tx.financialMovement.findMany({
+        where: { paymentId, status: 'Ativo', origem: { not: 'ESTORNO' } },
+      });
+      const now = new Date();
+      for (const mov of activeMovements) {
+        await tx.financialMovement.update({
+          where: { id: mov.id },
+          data: {
+            status: 'Estornado',
+            reversedAt: now,
+            reversalReason: 'Cancelamento de pagamento',
+          },
+        });
+        await tx.financialMovement.create({
+          data: {
+            tipo: mov.tipo === 'ENTRADA' ? 'SAIDA' : 'ENTRADA',
+            origem: 'ESTORNO',
+            descricao: `Estorno por cancelamento de pagamento (${mov.descricao})`,
+            categoria: mov.categoria,
+            valor: mov.valor,
+            dataMovimentacao: now,
+            metodo: mov.metodo,
+            status: 'Ativo',
+            clientId: mov.clientId,
+            attendanceId: mov.attendanceId,
+            paymentId: mov.paymentId,
+            reversedFromId: mov.id,
+            observacoes: 'Cancelamento de pagamento',
+          },
+        });
+      }
+
       return p;
     });
 
@@ -604,7 +741,16 @@ export class PaymentService {
    */
   static async deletePayment(paymentId: string): Promise<{ success: boolean }> {
     await this.getPaymentById(paymentId);
-    await prisma.payment.delete({ where: { id: paymentId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.financialMovement.updateMany({
+        where: { paymentId },
+        data: { paymentId: null, pixInstallmentId: null, reversedFromId: null },
+      });
+      await tx.financialMovement.deleteMany({
+        where: { paymentId },
+      });
+      await tx.payment.delete({ where: { id: paymentId } });
+    });
     return { success: true };
   }
 }

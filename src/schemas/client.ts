@@ -138,7 +138,7 @@ export const clientListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional().default(20),
 });
 
-export type CreateClientInput = z.infer<typeof createClientSchema>;
+export type CreateClientInput = z.input<typeof createClientSchema>;
 export type UpdateClientInput = z.infer<typeof updateClientSchema>;
-export type EmergencyContactInput = z.infer<typeof emergencyContactInputSchema>;
-export type ClientListQuery = z.infer<typeof clientListQuerySchema>;
+export type EmergencyContactInput = z.input<typeof emergencyContactInputSchema>;
+export type ClientListQuery = z.input<typeof clientListQuerySchema>;

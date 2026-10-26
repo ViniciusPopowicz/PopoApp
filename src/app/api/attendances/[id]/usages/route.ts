@@ -5,6 +5,8 @@ import { recordProductUsageSchema } from '@/schemas/product';
 import { DomainError } from '@/lib/errors';
 import prisma from '@/lib/prisma';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await requireAuth(request);
@@ -17,6 +19,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         stockUnit: {
           include: { lot: { include: { product: true } } },
         },
+        lot: {
+          include: { product: true },
+        },
+        product: true,
         attendanceProcedure: {
           include: { procedure: true },
         },
@@ -24,22 +30,35 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       orderBy: { dataHora: 'asc' },
     });
 
-    const data = usages.map((u) => ({
-      id: u.id,
-      attendanceId: u.attendanceId,
-      attendanceDate: u.attendance.dataHora.toISOString(),
-      clientId: u.attendance.clientId,
-      clientName: u.attendance.client.nome,
-      stockUnitId: u.stockUnitId,
-      codigoSerial: u.stockUnit.codigoSerial,
-      productName: u.stockUnit.lot.product.nome,
-      isReusable: u.stockUnit.lot.product.isReusable,
-      attendanceProcedureId: u.attendanceProcedureId,
-      procedureName: u.attendanceProcedure?.procedure?.nome ?? null,
-      dataHora: u.dataHora.toISOString(),
-      observacoes: u.observacoes,
-      createdAt: u.createdAt.toISOString(),
-    }));
+    const data = usages.map((u) => {
+      const resolvedProduct = u.stockUnit?.lot?.product ?? u.lot?.product ?? u.product;
+      const resolvedLot = u.stockUnit?.lot ?? u.lot;
+
+      return {
+        id: u.id,
+        attendanceId: u.attendanceId,
+        attendanceDate: u.attendance.dataHora.toISOString(),
+        clientId: u.attendance.clientId,
+        clientName: u.attendance.client.nome,
+        stockUnitId: u.stockUnitId ?? null,
+        codigoSerial: u.stockUnit?.codigoSerial ?? null,
+        productId: resolvedProduct?.id ?? u.productId ?? null,
+        lotId: resolvedLot?.id ?? u.lotId ?? null,
+        numeroLote: resolvedLot?.numeroLote ?? null,
+        productName: resolvedProduct?.nome ?? 'Produto',
+        isReusable: Boolean(resolvedProduct?.isReusable),
+        quantidade: Number(u.quantidade ?? 1),
+        unidade: u.unidade ?? resolvedProduct?.unidade ?? null,
+        status: u.status,
+        reversedAt: u.reversedAt ? u.reversedAt.toISOString() : null,
+        reversalReason: u.reversalReason ?? null,
+        attendanceProcedureId: u.attendanceProcedureId,
+        procedureName: u.attendanceProcedure?.procedure?.nome ?? null,
+        dataHora: u.dataHora.toISOString(),
+        observacoes: u.observacoes,
+        createdAt: u.createdAt.toISOString(),
+      };
+    });
 
     return NextResponse.json({ success: true, data });
   } catch (error: any) {

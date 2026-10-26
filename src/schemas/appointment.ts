@@ -24,6 +24,7 @@ export const createAppointmentSchema = z.object({
     errorMap: () => ({ message: 'Data e hora do agendamento inválidas' }),
   }),
   valorEstimado: z.coerce.number().min(0, 'Valor estimado deve ser positivo').optional().nullable(),
+  duracaoMinutos: z.coerce.number().int().min(1).max(1440).optional().default(60),
   observacoes: z.string().trim().max(4000, 'Observações muito longas').optional().nullable(),
   plannedProcedureIds: z.array(z.string().uuid()).optional().default([]),
   prefillAttendance: z.boolean().optional().default(false),
@@ -66,9 +67,9 @@ export const appointmentListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional().default(50),
 });
 
-export type CreateAppointmentInput = z.infer<typeof createAppointmentSchema>;
+export type CreateAppointmentInput = z.input<typeof createAppointmentSchema>;
 export type UpdateAppointmentInput = z.infer<typeof updateAppointmentSchema>;
 export type CancelAppointmentInput = z.infer<typeof cancelAppointmentSchema>;
 export type NoShowAppointmentInput = z.infer<typeof noShowAppointmentSchema>;
 export type RescheduleAppointmentInput = z.infer<typeof rescheduleAppointmentSchema>;
-export type AppointmentListQuery = z.infer<typeof appointmentListQuerySchema>;
+export type AppointmentListQuery = z.input<typeof appointmentListQuerySchema>;

@@ -83,7 +83,7 @@ export const createProcedureSchema = z.object({
     .default([]),
 });
 
-export type CreateProcedureInput = z.infer<typeof createProcedureSchema>;
+export type CreateProcedureInput = z.input<typeof createProcedureSchema>;
 
 /**
  * Schema for updating an existing procedure. All fields are optional,
