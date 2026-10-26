@@ -6,7 +6,7 @@ export const attendanceStatusSchema = z.enum(ATTENDANCE_STATUSES, {
 });
 
 export const createAttendanceSchema = z.object({
-  appointmentId: z.string().uuid('ID do agendamento inválido'),
+  appointmentId: z.string().uuid('ID do agendamento inválido').optional().nullable(),
   clientId: z.string().uuid('ID do cliente inválido'),
   dataHora: z.coerce.date().optional(),
   observacoes: z.string().trim().max(4000).optional().nullable(),
@@ -49,9 +49,9 @@ export const attendanceListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional().default(50),
 });
 
-export type CreateAttendanceInput = z.infer<typeof createAttendanceSchema>;
+export type CreateAttendanceInput = z.input<typeof createAttendanceSchema>;
 export type UpdateAttendanceInput = z.infer<typeof updateAttendanceSchema>;
 export type AddAttendanceProcedureInput = z.infer<typeof addAttendanceProcedureSchema>;
 export type UpdateAttendanceProcedureInput = z.infer<typeof updateAttendanceProcedureSchema>;
 export type SetDiscountInput = z.infer<typeof setDiscountSchema>;
-export type AttendanceListQuery = z.infer<typeof attendanceListQuerySchema>;
+export type AttendanceListQuery = z.input<typeof attendanceListQuerySchema>;

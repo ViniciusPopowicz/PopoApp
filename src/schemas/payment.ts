@@ -55,7 +55,7 @@ export const updatePixInstallmentStatusSchema = z.object({
   dataPagamento: z.coerce.date().nullable().optional(),
 });
 
-export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;
-export type CreatePixScheduleInput = z.infer<typeof createPixScheduleSchema>;
-export type PayPixInstallmentInput = z.infer<typeof payPixInstallmentSchema>;
+export type RecordPaymentInput = z.input<typeof recordPaymentSchema>;
+export type CreatePixScheduleInput = z.input<typeof createPixScheduleSchema>;
+export type PayPixInstallmentInput = z.input<typeof payPixInstallmentSchema>;
 export type UpdatePixInstallmentStatusInput = z.infer<typeof updatePixInstallmentStatusSchema>;

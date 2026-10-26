@@ -41,21 +41,25 @@ export interface AppointmentSummaryDto {
   rescheduledFromId: string | null;
   rescheduledToId: string | null;
   plannedProceduresCount: number;
+  attendanceId?: string | null;
   attendancesCount: number;
   hasRealizadoAttendance: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
+export interface AppointmentAttendanceRefDto {
+  id: string;
+  status: string;
+  dataHora: string;
+  completedAt: string | null;
+  desconto: number;
+}
+
 export interface AppointmentDetailDto extends AppointmentSummaryDto {
   plannedProcedures: PlannedProcedureDto[];
-  attendances: {
-    id: string;
-    status: string;
-    dataHora: string;
-    completedAt: string | null;
-    desconto: number;
-  }[];
+  attendance: AppointmentAttendanceRefDto | null;
+  attendances: AppointmentAttendanceRefDto[];
   rescheduledFrom?: {
     id: string;
     dataHora: string;

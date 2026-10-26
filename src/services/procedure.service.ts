@@ -147,8 +147,8 @@ export async function createProcedure(
       data: {
         nome: data.nome.trim(),
         descricao: data.descricao.trim(),
-        valorPadrao: new Prisma.Decimal(data.valorPadrao),
-        duracaoMinutos: data.duracaoMinutos,
+        valorPadrao: new Prisma.Decimal(data.valorPadrao as any),
+        duracaoMinutos: Number(data.duracaoMinutos),
         categoria: data.categoria.trim(),
         isActive,
         ...(data.productIds && data.productIds.length > 0

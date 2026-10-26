@@ -1,6 +1,6 @@
 import prisma from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
-import { ValidationError, NotFoundError } from '@/lib/errors';
+import { ValidationError, NotFoundError, ConflictError } from '@/lib/errors';
 import {
   CreateAttendanceInput,
   UpdateAttendanceInput,
@@ -66,41 +66,70 @@ export class AttendanceService {
   }
 
   /**
-   * Creates an additional Attendance for an existing Appointment (supports 1:N cardinality).
+   * Creates an Attendance, either linked 1:1 to an Appointment or as an independent Attendance (appointmentId = null).
+   * Enforces strict 1:1 cardinality: an Appointment cannot have more than one Attendance.
    * Status always defaults to 'Pendente' (D1, V07).
    */
   static async createAttendance(data: CreateAttendanceInput) {
-    const appt = await prisma.appointment.findUnique({
-      where: { id: data.appointmentId },
-      select: { id: true, clientId: true, status: true },
+    const client = await prisma.client.findUnique({
+      where: { id: data.clientId },
+      select: { id: true, status: true },
     });
 
-    if (!appt) {
-      throw new NotFoundError('Agendamento não encontrado');
+    if (!client) {
+      throw new NotFoundError('Cliente não encontrado');
     }
 
-    if (appt.clientId !== data.clientId) {
-      throw new ValidationError('O cliente informado não corresponde ao cliente do agendamento');
+    if (client.status !== 'ativo') {
+      throw new ValidationError('Não é possível criar atendimento para um cliente inativo');
     }
 
-    if (['Cancelado', 'Reagendado'].includes(appt.status)) {
-      throw new ValidationError(`Não é possível criar atendimento para um agendamento "${appt.status}"`);
+    if (data.appointmentId) {
+      const appt = await prisma.appointment.findUnique({
+        where: { id: data.appointmentId },
+        include: {
+          attendance: { select: { id: true } },
+        },
+      });
+
+      if (!appt) {
+        throw new NotFoundError('Agendamento não encontrado');
+      }
+
+      if (appt.clientId !== data.clientId) {
+        throw new ValidationError('O cliente informado não corresponde ao cliente do agendamento');
+      }
+
+      if (['Cancelado', 'Reagendado'].includes(appt.status)) {
+        throw new ValidationError(`Não é possível criar atendimento para um agendamento "${appt.status}"`);
+      }
+
+      if (appt.attendance) {
+        throw new ConflictError('Este agendamento já possui um atendimento vinculado');
+      }
     }
 
-    return await prisma.attendance.create({
-      data: {
-        appointmentId: data.appointmentId,
-        clientId: data.clientId,
-        status: 'Pendente', // Never created as Realizado
-        dataHora: data.dataHora ?? new Date(),
-        desconto: new Prisma.Decimal(data.desconto ?? 0),
-        observacoes: data.observacoes ? data.observacoes.trim() : null,
-      },
-      include: {
-        client: { select: { id: true, nome: true, cpf: true } },
-        appointment: { select: { id: true, dataHora: true, status: true } },
-      },
-    });
+    try {
+      return await prisma.attendance.create({
+        data: {
+          appointmentId: data.appointmentId ?? null,
+          clientId: data.clientId,
+          status: 'Pendente', // Never created as Realizado
+          dataHora: data.dataHora ?? new Date(),
+          desconto: new Prisma.Decimal(data.desconto ?? 0),
+          observacoes: data.observacoes ? data.observacoes.trim() : null,
+        },
+        include: {
+          client: { select: { id: true, nome: true, cpf: true } },
+          appointment: { select: { id: true, dataHora: true, status: true } },
+        },
+      });
+    } catch (error: any) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictError('Este agendamento já possui um atendimento vinculado');
+      }
+      throw error;
+    }
   }
 
   /**
@@ -129,10 +158,13 @@ export class AttendanceService {
           orderBy: { createdAt: 'desc' },
         },
         productUsages: {
+          where: { status: 'Ativo' },
           include: {
             stockUnit: {
               include: { lot: { include: { product: true } } },
             },
+            lot: { include: { product: true } },
+            product: true,
           },
         },
       },
@@ -348,7 +380,7 @@ export class AttendanceService {
       throw new NotFoundError('Atendimento não encontrado');
     }
 
-    const planned = attendance.appointment.plannedProcedures;
+    const planned = attendance.appointment?.plannedProcedures ?? [];
     if (planned.length === 0) {
       return { addedCount: 0, procedures: attendance.procedures };
     }
@@ -414,7 +446,6 @@ export class AttendanceService {
   static async completeAttendance(id: string) {
     const attendance = await prisma.attendance.findUnique({
       where: { id },
-      select: { id: true, status: true },
     });
 
     if (!attendance) {
@@ -439,9 +470,9 @@ export class AttendanceService {
   }
 
   /**
-   * Manually cancels an attendance.
+   * Manually cancels an attendance and dismisses pending reminders tied to it.
    */
-  static async cancelAttendance(id: string) {
+  static async cancelAttendance(id: string, motivo?: string) {
     const attendance = await prisma.attendance.findUnique({
       where: { id },
       select: { id: true, status: true },
@@ -451,9 +482,33 @@ export class AttendanceService {
       throw new NotFoundError('Atendimento não encontrado');
     }
 
-    return await prisma.attendance.update({
-      where: { id },
-      data: { status: 'Cancelado' },
+    return await prisma.$transaction(async (tx) => {
+      const updated = await tx.attendance.update({
+        where: { id },
+        data: { status: 'Cancelado' },
+      });
+
+      await tx.reminder.updateMany({
+        where: {
+          attendanceId: id,
+          status: { in: ['pendente', 'Pendente'] },
+        },
+        data: {
+          status: 'dispensado',
+        },
+      });
+
+      await tx.reminderRecurrence.updateMany({
+        where: {
+          attendanceId: id,
+          isActive: true,
+        },
+        data: {
+          isActive: false,
+        },
+      });
+
+      return updated;
     });
   }
 }

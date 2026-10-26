@@ -102,6 +102,11 @@ interface AppointmentItem {
       precoPadrao?: number | null;
     };
   }>;
+  attendance?: {
+    id: string;
+    status: string;
+    completedAt?: string | null;
+  } | null;
   attendances?: Array<{
     id: string;
     status: string;
@@ -432,8 +437,8 @@ export default function AgendaPage() {
     }
   };
 
-  // Helper for attendance ID
-  const attendanceId = selectedAppointment?.attendances?.[0]?.id;
+  // Helper for 1:1 attendance ID
+  const attendanceId = selectedAppointment?.attendance?.id ?? selectedAppointment?.attendances?.[0]?.id;
 
   return (
     <div className="space-y-6">

@@ -1,14 +1,27 @@
 // src/types/reminder.ts
-import { Prisma } from '@prisma/client';
 
 export type ReminderPriority = 'baixa' | 'media' | 'alta';
 export type ReminderStatus = 'pendente' | 'concluido' | 'dispensado';
-export type ReminderType = 'parcela_pix' | 'retorno' | 'geral' | 'aniversario' | 'outro';
+export type ReminderType =
+  | 'parcela_pix'
+  | 'retorno'
+  | 'geral'
+  | 'aniversario'
+  | 'agendamento'
+  | 'atendimento'
+  | 'outro';
+
+export const RECURRENCE_FREQUENCIES = ['DIARIA', 'SEMANAL', 'MENSAL', 'ANUAL'] as const;
+export type RecurrenceFrequency = (typeof RECURRENCE_FREQUENCIES)[number];
 
 export interface ReminderDto {
   id: string;
   clientId: string | null;
+  appointmentId: string | null;
+  attendanceId: string | null;
   pixInstallmentId: string | null;
+  recurrenceId: string | null;
+  occurrenceIndex: number | null;
   titulo: string;
   descricao: string | null;
   dataVencimento: string;
@@ -25,6 +38,16 @@ export interface ReminderDto {
     cpf: string;
     telefone: string;
   } | null;
+  appointment?: {
+    id: string;
+    dataHora: string;
+    status: string;
+  } | null;
+  attendance?: {
+    id: string;
+    dataHora: string;
+    status: string;
+  } | null;
   pixInstallment?: {
     id: string;
     paymentId: string;
@@ -40,12 +63,52 @@ export interface ReminderDto {
   } | null;
 }
 
+export interface ReminderRecurrenceDto {
+  id: string;
+  clientId: string | null;
+  appointmentId: string | null;
+  attendanceId: string | null;
+  titulo: string;
+  descricao: string | null;
+  tipo: string;
+  prioridade: ReminderPriority;
+  frequencia: RecurrenceFrequency;
+  intervalo: number;
+  dataInicio: string;
+  dataFim: string | null;
+  maxOcorrencias: number | null;
+  ocorrenciasGeradas: number;
+  ultimaGeracaoEm: string | null;
+  proximaOcorrenciaEm: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  client?: {
+    id: string;
+    nome: string;
+  } | null;
+  appointment?: {
+    id: string;
+    dataHora: string;
+    status: string;
+  } | null;
+  attendance?: {
+    id: string;
+    dataHora: string;
+    status: string;
+  } | null;
+  occurrences?: ReminderDto[];
+}
+
 export interface ReminderListQuery {
   status?: ReminderStatus | 'todos' | 'atrasado';
   prioridade?: ReminderPriority;
   tipo?: string;
   clientId?: string;
+  appointmentId?: string;
+  attendanceId?: string;
   pixInstallmentId?: string;
+  recurrenceId?: string;
   startDate?: Date | string;
   endDate?: Date | string;
   overdueOnly?: boolean;

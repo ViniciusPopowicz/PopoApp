@@ -4,6 +4,8 @@ import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/session';
 import { DomainError } from '@/lib/errors';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     await requireAuth(request);
@@ -15,8 +17,8 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit;
 
     const where: any = {};
-    if (status) where.status = status;
-    if (metodo) where.metodo = metodo;
+    if (status && status !== 'todos' && status !== 'ALL') where.status = status;
+    if (metodo && metodo !== 'todos' && metodo !== 'ALL') where.metodo = metodo;
 
     const [total, payments] = await Promise.all([
       prisma.payment.count({ where }),
@@ -24,7 +26,7 @@ export async function GET(request: NextRequest) {
         where,
         skip,
         take: limit,
-        orderBy: { dataPagamento: 'desc' },
+        orderBy: [{ dataPagamento: 'desc' }, { createdAt: 'desc' }],
         include: {
           attendance: {
             select: {
@@ -35,13 +37,16 @@ export async function GET(request: NextRequest) {
               client: { select: { id: true, nome: true, cpf: true } },
               procedures: {
                 select: {
+                  id: true,
                   practicedValue: true,
-                  procedure: { select: { nome: true } },
+                  procedure: { select: { id: true, nome: true } },
                 },
               },
             },
           },
-          pixInstallments: true,
+          pixInstallments: {
+            orderBy: { numeroParcela: 'asc' },
+          },
         },
       }),
     ]);
@@ -62,8 +67,13 @@ export async function GET(request: NextRequest) {
         desconto: Number(p.attendance.desconto),
         client: p.attendance.client,
         procedures: p.attendance.procedures.map((proc) => ({
+          id: proc.id,
           nome: proc.procedure.nome,
           practicedValue: Number(proc.practicedValue),
+          procedure: {
+            id: proc.procedure.id,
+            nome: proc.procedure.nome,
+          },
         })),
       },
       pixInstallments: p.pixInstallments.map((inst) => ({
@@ -72,18 +82,26 @@ export async function GET(request: NextRequest) {
         totalParcelas: inst.totalParcelas,
         valor: Number(inst.valor),
         dataVencimento: inst.dataVencimento.toISOString(),
+        dataPagamento: inst.dataPagamento?.toISOString() ?? null,
         status: inst.status,
       })),
     }));
 
+    const totalPages = Math.ceil(total / limit) || 1;
+
     return NextResponse.json({
       success: true,
       data: formattedPayments,
+      payments: formattedPayments,
+      page,
+      limit,
+      total,
+      totalPages,
       pagination: {
         page,
         limit,
         total,
-        totalPages: Math.ceil(total / limit),
+        totalPages,
       },
     });
   } catch (error: any) {

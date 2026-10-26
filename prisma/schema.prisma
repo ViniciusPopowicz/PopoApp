@@ -37,12 +37,15 @@ model Client {
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
-  emergencyContacts EmergencyContact[]
-  attachments       Attachment[]
-  appointments      Appointment[]
-  attendances       Attendance[]
-  reminders         Reminder[]
-  stockUnits        StockUnit[]        // Unidades reutilizáveis vinculadas ao cliente
+  emergencyContacts    EmergencyContact[]
+  attachments          Attachment[]
+  appointments         Appointment[]
+  attendances          Attendance[]
+  reminders            Reminder[]
+  reminderRecurrences  ReminderRecurrence[]
+  stockUnits           StockUnit[]           // Unidades reutilizáveis vinculadas ao cliente
+  financialObligations FinancialObligation[]
+  financialMovements   FinancialMovement[]
 
   @@index([nome])
   @@index([status])
@@ -68,23 +71,27 @@ model EmergencyContact {
 // 3. AGENDAMENTO E PROCEDIMENTOS PLANEJADOS
 // ==========================================
 model Appointment {
-  id                  String             @id @default(uuid())
+  id                  String                @id @default(uuid())
   clientId            String
   dataHora            DateTime
-  status              String             @default("Agendado") // 'Agendado', 'Confirmado', 'Concluído', 'Cancelado', 'Não compareceu', 'Reagendado'
-  valorEstimado       Decimal?           @db.Decimal(10, 2)
-  observacoes         String?            @db.NVarChar(Max)
+  status              String                @default("Agendado") // 'Agendado', 'Confirmado', 'Concluído', 'Cancelado', 'Não compareceu', 'Reagendado'
+  valorEstimado       Decimal?              @db.Decimal(10, 2)
+  observacoes         String?               @db.NVarChar(Max)
   motivoCancelamento  String?
-  rescheduledFromId   String?            // Aponta para o agendamento de origem
-  rescheduledToId     String?            // Aponta para o novo agendamento criado
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
+  rescheduledFromId   String?               // Aponta para o agendamento de origem
+  rescheduledToId     String?               // Aponta para o novo agendamento criado
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
 
-  client              Client             @relation(fields: [clientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  rescheduledFrom     Appointment?       @relation("RescheduleHistory", fields: [rescheduledFromId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  rescheduledTo       Appointment[]      @relation("RescheduleHistory")
-  attendances         Attendance[]       // 1:N
-  plannedProcedures   PlannedProcedure[]
+  client               Client                @relation(fields: [clientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rescheduledFrom      Appointment?          @relation("RescheduleHistory", fields: [rescheduledFromId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rescheduledTo        Appointment[]         @relation("RescheduleHistory")
+  attendance           Attendance?           // 1:1 estrito com Atendimento
+  plannedProcedures    PlannedProcedure[]
+  reminders            Reminder[]
+  reminderRecurrences  ReminderRecurrence[]
+  financialObligations FinancialObligation[]
+  financialMovements   FinancialMovement[]
 
   @@index([clientId])
   @@index([dataHora])
@@ -110,7 +117,7 @@ model PlannedProcedure {
 // ==========================================
 model Attendance {
   id            String                @id @default(uuid())
-  appointmentId String
+  appointmentId String?               @unique // 1:1 estrito com Agendamento (opcional para atendimento avulso)
   clientId      String
   status        String                @default("Pendente") // 'Pendente', 'Realizado', 'Cancelado'
   dataHora      DateTime              @default(now())
@@ -120,15 +127,19 @@ model Attendance {
   createdAt     DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
 
-  appointment   Appointment           @relation(fields: [appointmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  client        Client                @relation(fields: [clientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  procedures    AttendanceProcedure[] // Associação técnica (NÃO PerformedProcedure)
-  productUsages ProductUsage[]
-  medicalRecord MedicalRecord?
-  attachments   Attachment[]
-  payments      Payment[]
+  appointment          Appointment?          @relation(fields: [appointmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  client               Client                @relation(fields: [clientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  procedures           AttendanceProcedure[] // Associação técnica (NÃO PerformedProcedure)
+  productUsages        ProductUsage[]
+  inventoryMovements   InventoryMovement[]
+  medicalRecord        MedicalRecord?
+  attachments          Attachment[]
+  payments             Payment[]
+  reminders            Reminder[]
+  reminderRecurrences  ReminderRecurrence[]
+  financialObligations FinancialObligation[]
+  financialMovements   FinancialMovement[]
 
-  @@index([appointmentId])
   @@index([clientId])
   @@index([status])
   @@index([dataHora])
@@ -171,43 +182,49 @@ model Procedure {
 }
 
 model AttendanceProcedure {
-  id                    String         @id @default(uuid())
+  id                    String              @id @default(uuid())
   attendanceId          String
   procedureId           String
-  standardValueSnapshot Decimal        @db.Decimal(10, 2) // Snapshot imutável do valor padrão na inclusão
-  practicedValue        Decimal        @db.Decimal(10, 2) // Valor praticado obrigatório e independente
+  standardValueSnapshot Decimal             @db.Decimal(10, 2) // Snapshot imutável do valor padrão na inclusão
+  practicedValue        Decimal             @db.Decimal(10, 2) // Valor praticado obrigatório e independente
   observacoes           String?
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
 
-  attendance   Attendance     @relation(fields: [attendanceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  procedure    Procedure      @relation(fields: [procedureId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  productUsages ProductUsage[]
+  attendance         Attendance          @relation(fields: [attendanceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  procedure          Procedure           @relation(fields: [procedureId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  productUsages      ProductUsage[]
+  inventoryMovements InventoryMovement[]
 
   @@index([attendanceId])
   @@index([procedureId])
 }
 
 // ==========================================
-// 6. PRODUTOS, LOTES E ESTOQUE INDIVIDUAL
+// 6. PRODUTOS, LOTES, ESTOQUE E MOVIMENTAÇÕES
 // ==========================================
 model Product {
-  id          String             @id @default(uuid())
-  nome        String
-  categoria   String?
-  marca       String?
-  descricao   String?            @db.NVarChar(Max)
-  unidade     String             // 'frasco', 'ampola', 'seringa', 'caixa', etc.
-  isReusable  Boolean            @default(false) // Reutilizável pelo mesmo cliente vs Uso único
-  isActive    Boolean            @default(true)
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id            String              @id @default(uuid())
+  nome          String
+  categoria     String?
+  marca         String?
+  descricao     String?             @db.NVarChar(Max)
+  unidade       String              // 'frasco', 'ampola', 'seringa', 'caixa', 'ml', 'g', etc.
+  trackingMode  String              @default("UNIT") // 'UNIT' (unidade física serial) | 'QUANTITY' (consumível por quantidade)
+  estoqueMinimo Decimal             @default(5.000) @db.Decimal(10, 3)
+  isReusable    Boolean             @default(false) // Reutilizável pelo mesmo cliente vs Uso único
+  isActive      Boolean             @default(true)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
 
-  lots                 ProductLot[]
+  lots                  ProductLot[]
   procedureAssociations ProcedureProduct[]
+  productUsages         ProductUsage[]
+  inventoryMovements    InventoryMovement[]
 
   @@index([nome])
   @@index([isActive])
+  @@index([trackingMode])
 }
 
 model ProcedureProduct {
@@ -222,35 +239,43 @@ model ProcedureProduct {
 }
 
 model ProductLot {
-  id            String      @id @default(uuid())
-  productId     String
-  numeroLote    String
-  dataValidade  DateTime?
-  dataAquisicao DateTime?
-  precoCusto    Decimal?    @db.Decimal(10, 2)
-  observacoes   String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id                   String              @id @default(uuid())
+  productId            String
+  numeroLote           String
+  dataValidade         DateTime?
+  dataAquisicao        DateTime?
+  precoCusto           Decimal?            @db.Decimal(10, 2)
+  quantidadeInicial    Decimal?            @db.Decimal(10, 3)
+  quantidadeDisponivel Decimal?            @db.Decimal(10, 3)
+  observacoes          String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
 
-  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
-  stockUnits StockUnit[]
+  product            Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stockUnits         StockUnit[]
+  productUsages      ProductUsage[]
+  inventoryMovements InventoryMovement[]
 
   @@index([productId])
   @@index([numeroLote])
 }
 
 model StockUnit {
-  id              String         @id @default(uuid())
-  lotId           String
-  codigoSerial    String         @unique // Identificador físico único (ex: UNIT-001)
-  status          String         @default("Disponivel") // 'Disponivel', 'EmUso', 'Esgotado', 'Descartado'
-  currentClientId String?        // Vinculado ao cliente caso seja produto reutilizável em uso
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id                   String              @id @default(uuid())
+  lotId                String
+  codigoSerial         String              @unique // Identificador físico único (ex: UNIT-001)
+  status               String              @default("Disponivel") // 'Disponivel', 'EmUso', 'Esgotado', 'Descartado'
+  currentClientId      String?             // Vinculado ao cliente caso seja produto reutilizável em uso
+  quantidadeInicial    Decimal?            @db.Decimal(10, 3)
+  quantidadeDisponivel Decimal?            @db.Decimal(10, 3)
+  motivoStatus         String?             // Motivo persistido de descarte/ajuste de status
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
 
-  lot           ProductLot     @relation(fields: [lotId], references: [id], onDelete: Cascade)
-  currentClient Client?        @relation(fields: [currentClientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  usages        ProductUsage[]
+  lot                ProductLot          @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  currentClient      Client?             @relation(fields: [currentClientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usages             ProductUsage[]
+  inventoryMovements InventoryMovement[]
 
   @@index([lotId])
   @@index([status])
@@ -260,19 +285,71 @@ model StockUnit {
 model ProductUsage {
   id                    String               @id @default(uuid())
   attendanceId          String
-  stockUnitId           String
+  stockUnitId           String?
+  productId             String?
+  lotId                 String?
   attendanceProcedureId String?
+  quantidade            Decimal              @default(1.000) @db.Decimal(10, 3)
+  unidade               String?
+  status                String               @default("Ativo") // 'Ativo' | 'Estornado'
+  reversedAt            DateTime?
+  reversalReason        String?
   dataHora              DateTime             @default(now())
   observacoes           String?
   createdAt             DateTime             @default(now())
 
   attendance          Attendance           @relation(fields: [attendanceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  stockUnit           StockUnit            @relation(fields: [stockUnitId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  stockUnit           StockUnit?           @relation(fields: [stockUnitId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  product             Product?             @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lot                 ProductLot?          @relation(fields: [lotId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   attendanceProcedure AttendanceProcedure? @relation(fields: [attendanceProcedureId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  inventoryMovements  InventoryMovement[]
 
   @@index([attendanceId])
   @@index([stockUnitId])
+  @@index([productId])
+  @@index([lotId])
   @@index([attendanceProcedureId])
+}
+
+model InventoryMovement {
+  id                    String               @id @default(uuid())
+  productId             String
+  lotId                 String?
+  stockUnitId           String?
+  attendanceId          String?
+  attendanceProcedureId String?
+  productUsageId        String?
+  reversedFromId        String?
+  reversedAt            DateTime?
+  reversalReason        String?
+  tipo                  String               // 'ENTRADA', 'CONSUMO', 'AJUSTE_POSITIVO', 'AJUSTE_NEGATIVO', 'PERDA_DESCARTE', 'REVERSAO'
+  quantidade            Decimal              @db.Decimal(10, 3)
+  unidade               String
+  saldoAnterior         Decimal?             @db.Decimal(10, 3)
+  saldoPosterior        Decimal?             @db.Decimal(10, 3)
+  motivo                String?              @db.NVarChar(Max)
+  observacoes           String?              @db.NVarChar(Max)
+  status                String               @default("Ativo") // 'Ativo' | 'Estornado'
+  origem                String               @default("SISTEMA") // 'LOTE_ENTRADA', 'ATENDIMENTO', 'AJUSTE_MANUAL', 'DESCARTE_UNIDADE', 'ESTORNO', 'MIGRACAO_INICIAL'
+  dataHora              DateTime             @default(now())
+  createdAt             DateTime             @default(now())
+
+  product             Product              @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lot                 ProductLot?          @relation(fields: [lotId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  stockUnit           StockUnit?           @relation(fields: [stockUnitId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  attendance          Attendance?          @relation(fields: [attendanceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  attendanceProcedure AttendanceProcedure? @relation(fields: [attendanceProcedureId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  productUsage        ProductUsage?        @relation(fields: [productUsageId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reversedFrom        InventoryMovement?   @relation("MovementReversal", fields: [reversedFromId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reversals           InventoryMovement[]  @relation("MovementReversal")
+
+  @@index([productId])
+  @@index([lotId])
+  @@index([stockUnitId])
+  @@index([attendanceId])
+  @@index([tipo])
+  @@index([dataHora])
 }
 
 // ==========================================
@@ -302,20 +379,22 @@ model Attachment {
 // 8. FINANCEIRO, PAGAMENTOS E LEMBRETES
 // ==========================================
 model Payment {
-  id                     String           @id @default(uuid())
+  id                     String                @id @default(uuid())
   attendanceId           String
-  valor                  Decimal          @db.Decimal(10, 2)
-  metodo                 String           // 'CartaoCredito', 'Pix', 'Dinheiro', 'CartaoDebito', 'Boleto', 'Transferencia'
-  status                 String           @default("Pago") // 'Pago', 'Pendente', 'Cancelado'
-  dataPagamento          DateTime?        @default(now())
-  numeroParcelas         Int              @default(1)
+  valor                  Decimal               @db.Decimal(10, 2)
+  metodo                 String                // 'CartaoCredito', 'Pix', 'Dinheiro', 'CartaoDebito', 'Boleto', 'Transferencia'
+  status                 String                @default("Pago") // 'Pago', 'Pendente', 'Cancelado'
+  dataPagamento          DateTime?             @default(now())
+  numeroParcelas         Int                   @default(1)
   identificadorTransacao String?
   observacoes            String?
-  createdAt              DateTime         @default(now())
-  updatedAt              DateTime         @updatedAt
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
 
-  attendance      Attendance       @relation(fields: [attendanceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  pixInstallments PixInstallment[]
+  attendance           Attendance            @relation(fields: [attendanceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pixInstallments      PixInstallment[]
+  financialObligations FinancialObligation[]
+  financialMovements   FinancialMovement[]
 
   @@index([attendanceId])
   @@index([metodo])
@@ -323,44 +402,195 @@ model Payment {
 }
 
 model PixInstallment {
-  id             String     @id @default(uuid())
+  id             String                @id @default(uuid())
   paymentId      String
   numeroParcela  Int
   totalParcelas  Int
-  valor          Decimal    @db.Decimal(10, 2)
+  valor          Decimal               @db.Decimal(10, 2)
   dataVencimento DateTime
   dataPagamento  DateTime?
-  status         String     @default("Pendente") // 'Pendente', 'Pago', 'Atrasado', 'Cancelado'
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  status         String                @default("Pendente") // 'Pendente', 'Pago', 'Atrasado', 'Cancelado'
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
 
-  payment   Payment    @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  reminders Reminder[]
+  payment              Payment               @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  reminders            Reminder[]
+  financialObligations FinancialObligation[]
+  financialMovements   FinancialMovement[]
 
   @@index([paymentId])
   @@index([dataVencimento])
   @@index([status])
 }
 
-model Reminder {
-  id               String          @id @default(uuid())
-  clientId         String?
-  pixInstallmentId String?
-  titulo           String
-  descricao        String?         @db.NVarChar(Max)
-  dataVencimento   DateTime
-  prioridade       String          @default("media") // 'baixa', 'media', 'alta'
-  status           String          @default("pendente") // 'pendente', 'concluido', 'dispensado'
-  tipo             String          @default("parcela_pix") // 'parcela_pix', 'retorno', 'geral'
-  completedAt      DateTime?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+model FinancialObligation {
+  id                 String                @id @default(uuid())
+  tipo               String                // 'RECEIVABLE' | 'PAYABLE'
+  descricao          String
+  valorOriginal      Decimal               @db.Decimal(10, 2)
+  dataVencimento     DateTime
+  categoria          String?               @default("Geral")
+  fornecedor         String?
+  metodo             String?
+  status             String                @default("Pendente") // 'Pendente', 'Parcial', 'Pago', 'Atrasado', 'Cancelado'
+  counterpartyName   String?
+  clientId           String?
+  appointmentId      String?
+  attendanceId       String?
+  paymentId          String?
+  pixInstallmentId   String?
+  observacoes        String?               @db.NVarChar(Max)
+  cancelledAt        DateTime?
+  cancellationReason String?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
 
-  client         Client?         @relation(fields: [clientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  pixInstallment PixInstallment? @relation(fields: [pixInstallmentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  client             Client?               @relation(fields: [clientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  appointment        Appointment?          @relation(fields: [appointmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  attendance         Attendance?           @relation(fields: [attendanceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payment            Payment?              @relation(fields: [paymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pixInstallment     PixInstallment?       @relation(fields: [pixInstallmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  settlements        FinancialSettlement[]
+  movements          FinancialMovement[]
+
+  @@index([tipo])
+  @@index([status])
+  @@index([dataVencimento])
+  @@index([clientId])
+  @@index([appointmentId])
+  @@index([attendanceId])
+}
+
+model FinancialSettlement {
+  id             String              @id @default(uuid())
+  obligationId   String
+  valor          Decimal             @db.Decimal(10, 2)
+  dataLiquidacao DateTime            @default(now())
+  metodo         String              // 'Pix', 'Dinheiro', 'CartaoCredito', 'CartaoDebito', 'Boleto', 'Transferencia', 'Outro'
+  status         String              @default("Ativo") // 'Ativo' | 'Estornado'
+  observacoes    String?
+  reversedAt     DateTime?
+  reversalReason String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  obligation     FinancialObligation @relation(fields: [obligationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  movement       FinancialMovement?
+
+  @@index([obligationId])
+  @@index([dataLiquidacao])
+  @@index([status])
+}
+
+model FinancialMovement {
+  id               String               @id @default(uuid())
+  tipo             String               // 'ENTRADA' | 'SAIDA'
+  origem           String               @default("LANCAMENTO_MANUAL") // 'PAGAMENTO_ATENDIMENTO', 'PARCELA_PIX', 'LIQUIDACAO_OBRIGACAO', 'LANCAMENTO_MANUAL', 'ESTORNO'
+  valor            Decimal              @db.Decimal(10, 2)
+  dataMovimentacao DateTime             @default(now())
+  metodo           String               // 'Pix', 'Dinheiro', 'CartaoCredito', 'CartaoDebito', 'Boleto', 'Transferencia', 'Outro'
+  descricao        String
+  categoria        String?              @default("Geral")
+  status           String               @default("Ativo") // 'Ativo' | 'Realizado' | 'Estornado' | 'Cancelado'
+  counterpartyName String?
+  clientId         String?
+  appointmentId    String?
+  attendanceId     String?
+  obligationId     String?
+  settlementId     String?              @unique
+  paymentId        String?
+  pixInstallmentId String?
+  reversedFromId   String?
+  reversedAt       DateTime?
+  reversalReason   String?
+  observacoes      String?              @db.NVarChar(Max)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  client           Client?              @relation(fields: [clientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  appointment      Appointment?         @relation(fields: [appointmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  attendance       Attendance?          @relation(fields: [attendanceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  obligation       FinancialObligation? @relation(fields: [obligationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  settlement       FinancialSettlement? @relation(fields: [settlementId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payment          Payment?             @relation(fields: [paymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pixInstallment   PixInstallment?      @relation(fields: [pixInstallmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reversedFrom     FinancialMovement?   @relation("FinancialMovementReversal", fields: [reversedFromId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reversals        FinancialMovement[]  @relation("FinancialMovementReversal")
+
+  @@index([tipo])
+  @@index([origem])
+  @@index([status])
+  @@index([dataMovimentacao])
+  @@index([clientId])
+  @@index([attendanceId])
+  @@index([obligationId])
+  @@index([paymentId])
+  @@index([pixInstallmentId])
+}
+
+model ReminderRecurrence {
+  id                  String       @id @default(uuid())
+  clientId            String?
+  appointmentId       String?
+  attendanceId        String?
+  titulo              String
+  descricao           String?      @db.NVarChar(Max)
+  tipo                String       @default("geral")
+  prioridade          String       @default("media")
+  frequencia          String       // 'DIARIA', 'SEMANAL', 'MENSAL', 'ANUAL'
+  intervalo           Int          @default(1)
+  dataInicio          DateTime
+  dataFim             DateTime?
+  maxOcorrencias      Int?
+  ocorrenciasGeradas  Int          @default(0)
+  proximaOcorrenciaEm DateTime?
+  ultimaGeracaoEm     DateTime?
+  proximaExecucao     DateTime?
+  isActive            Boolean      @default(true)
+  timezone            String       @default("America/Sao_Paulo")
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  client              Client?      @relation(fields: [clientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  appointment         Appointment? @relation(fields: [appointmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  attendance          Attendance?  @relation(fields: [attendanceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reminders           Reminder[]
+
+  @@index([isActive, proximaOcorrenciaEm])
+  @@index([clientId])
+  @@index([appointmentId])
+  @@index([attendanceId])
+}
+
+model Reminder {
+  id               String              @id @default(uuid())
+  clientId         String?
+  appointmentId    String?
+  attendanceId     String?
+  pixInstallmentId String?
+  recurrenceId     String?
+  occurrenceIndex  Int?
+  titulo           String
+  descricao        String?             @db.NVarChar(Max)
+  dataVencimento   DateTime
+  prioridade       String              @default("media") // 'baixa', 'media', 'alta'
+  status           String              @default("pendente") // 'pendente', 'concluido', 'dispensado'
+  tipo             String              @default("parcela_pix") // 'parcela_pix', 'retorno', 'geral'
+  completedAt      DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  client         Client?             @relation(fields: [clientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  appointment    Appointment?        @relation(fields: [appointmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  attendance     Attendance?         @relation(fields: [attendanceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pixInstallment PixInstallment?     @relation(fields: [pixInstallmentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  recurrence     ReminderRecurrence? @relation(fields: [recurrenceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([clientId])
+  @@index([appointmentId])
+  @@index([attendanceId])
   @@index([pixInstallmentId])
+  @@index([recurrenceId])
   @@index([dataVencimento])
   @@index([status])
 }

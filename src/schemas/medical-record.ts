@@ -66,5 +66,5 @@ export const updateMedicalRecordSchema = z.object({
   };
 });
 
-export type CreateMedicalRecordInput = z.infer<typeof createMedicalRecordSchema>;
+export type CreateMedicalRecordInput = z.input<typeof createMedicalRecordSchema>;
 export type UpdateMedicalRecordInput = z.infer<typeof updateMedicalRecordSchema>;

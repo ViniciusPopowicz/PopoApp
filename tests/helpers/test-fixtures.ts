@@ -76,6 +76,8 @@ export async function createTestProduct(overrides: Record<string, any> = {}) {
       categoria: overrides.categoria ?? overrides.category ?? null,
       descricao: overrides.descricao ?? overrides.description ?? null,
       unidade: overrides.unidade ?? overrides.unitOfMeasure ?? 'frasco',
+      trackingMode: overrides.trackingMode ?? 'UNIT',
+      estoqueMinimo: overrides.estoqueMinimo ?? 0,
       isReusable: overrides.isReusable ?? false,
       isActive: overrides.isActive ?? true,
     },
@@ -87,6 +89,7 @@ export async function createTestProduct(overrides: Record<string, any> = {}) {
  */
 export async function createTestLot(productId: string, overrides: Record<string, any> = {}) {
   const count = getNextCounter();
+  const quantidadeInicial = overrides.quantidadeInicial ?? overrides.initialQuantity ?? 0;
 
   return (prismaTest as any).productLot.create({
     data: {
@@ -95,6 +98,8 @@ export async function createTestLot(productId: string, overrides: Record<string,
       dataValidade: overrides.dataValidade ?? overrides.expirationDate ?? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
       dataAquisicao: overrides.dataAquisicao ?? null,
       precoCusto: overrides.precoCusto ?? null,
+      quantidadeInicial,
+      quantidadeDisponivel: overrides.quantidadeDisponivel ?? overrides.availableQuantity ?? quantidadeInicial,
       observacoes: overrides.observacoes ?? null,
     },
   });
@@ -105,25 +110,28 @@ export async function createTestLot(productId: string, overrides: Record<string,
  */
 export async function createTestStockUnit(lotId: string, overrides: Record<string, any> = {}) {
   const count = getNextCounter();
+  const quantidadeInicial = overrides.quantidadeInicial ?? overrides.initialQuantity ?? 1;
 
   return (prismaTest as any).stockUnit.create({
     data: {
       lotId,
       codigoSerial: overrides.codigoSerial ?? overrides.unitIdentifier ?? `UNIT-${count}`,
       status: overrides.status ?? 'Disponivel',
+      quantidadeInicial,
+      quantidadeDisponivel: overrides.quantidadeDisponivel ?? overrides.availableQuantity ?? quantidadeInicial,
       currentClientId: overrides.currentClientId ?? null,
     },
   });
 }
 
 /**
- * Creates an isolated test Appointment with its linked Attendance.
+ * Creates an isolated test Appointment with its linked 1:1 Attendance.
  */
 export async function createTestAppointment(clientId: string, overrides: Record<string, any> = {}) {
-  const count = getNextCounter();
   const dataHora = overrides.dataHora ?? overrides.scheduledDate ?? new Date(Date.now() + 86400000);
+  const skipAttendance = overrides.skipAttendance === true;
 
-  return (prismaTest as any).appointment.create({
+  const created = await (prismaTest as any).appointment.create({
     data: {
       clientId,
       dataHora,
@@ -133,16 +141,25 @@ export async function createTestAppointment(clientId: string, overrides: Record<
       motivoCancelamento: overrides.motivoCancelamento ?? overrides.cancellationReason ?? null,
       rescheduledFromId: overrides.rescheduledFromId ?? overrides.rescheduledFromAppointmentId ?? null,
       rescheduledToId: overrides.rescheduledToId ?? overrides.rescheduledToAppointmentId ?? null,
-      attendances: {
-        create: {
-          clientId,
-          status: 'Pendente',
-          observacoes: 'Atendimento inicial gerado automaticamente',
-        },
-      },
+      ...(skipAttendance
+        ? {}
+        : {
+            attendance: {
+              create: {
+                clientId,
+                status: 'Pendente',
+                observacoes: 'Atendimento inicial gerado automaticamente',
+              },
+            },
+          }),
     },
     include: {
-      attendances: true,
+      attendance: true,
     },
   });
+
+  return {
+    ...created,
+    attendances: created.attendance ? [created.attendance] : [],
+  };
 }

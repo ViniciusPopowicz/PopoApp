@@ -8,9 +8,14 @@ import prismaTest from './db-client';
  */
 export async function cleanTestDatabase(): Promise<void> {
   const tablesInOrder = [
+    'FinancialMovement',
+    'FinancialSettlement',
+    'FinancialObligation',
     'Reminder',
+    'ReminderRecurrence',
     'PixInstallment',
     'Payment',
+    'InventoryMovement',
     'ProductUsage',
     'StockUnit',
     'ProductLot',
@@ -32,6 +37,8 @@ export async function cleanTestDatabase(): Promise<void> {
     'UPDATE [Appointment] SET [rescheduledFromId] = NULL, [rescheduledToId] = NULL'
   );
   await prismaTest.$executeRawUnsafe('UPDATE [Client] SET [profilePhotoId] = NULL');
+  await prismaTest.$executeRawUnsafe('UPDATE [FinancialMovement] SET [reversedFromId] = NULL');
+  await prismaTest.$executeRawUnsafe('UPDATE [InventoryMovement] SET [reversedFromId] = NULL');
 
   for (const table of tablesInOrder) {
     await prismaTest.$executeRawUnsafe(`DELETE FROM [${table}]`);

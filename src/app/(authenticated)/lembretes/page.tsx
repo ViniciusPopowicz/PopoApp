@@ -7,8 +7,16 @@ import { StatusBadge } from '@/components/shared/status-badge';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -20,42 +28,52 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  Plus,
   Bell,
+  Plus,
   CheckCircle2,
   XCircle,
   Clock,
-  AlertTriangle,
+  AlertCircle,
   User,
   QrCode,
   RefreshCw,
-  AlertCircle,
   Info,
+  Calendar,
+  Stethoscope,
+  Repeat,
 } from 'lucide-react';
-import { formatCurrency, formatDate, formatDateTime } from '@/lib/format';
+import { formatCurrency, formatDate } from '@/lib/format';
 
 interface ReminderItem {
   id: string;
+  clientId?: string | null;
+  appointmentId?: string | null;
+  attendanceId?: string | null;
+  pixInstallmentId?: string | null;
+  recurrenceId?: string | null;
+  occurrenceIndex?: number | null;
   titulo: string;
   descricao?: string | null;
-  tipo: string;
-  status: 'pendente' | 'concluido' | 'dispensado';
-  prioridade: 'baixa' | 'media' | 'alta';
   dataVencimento: string;
-  isOverdue?: boolean;
+  prioridade: 'baixa' | 'media' | 'alta';
+  status: 'pendente' | 'concluido' | 'dispensado';
+  tipo: string;
   completedAt?: string | null;
+  isOverdue?: boolean;
   client?: {
     id: string;
     nome: string;
     telefone?: string | null;
+  } | null;
+  appointment?: {
+    id: string;
+    dataHora: string;
+    status: string;
+  } | null;
+  attendance?: {
+    id: string;
+    dataHora: string;
+    status: string;
   } | null;
   pixInstallment?: {
     id: string;
@@ -63,65 +81,56 @@ interface ReminderItem {
     totalParcelas: number;
     valor: number;
     status: string;
+    payment?: {
+      id: string;
+      attendanceId: string;
+    };
   } | null;
 }
 
 interface ReminderStats {
-  total: number;
-  pending: number;
-  overdue: number;
-  completed: number;
-  dismissed: number;
-}
-
-interface ClientOption {
-  id: string;
-  nome: string;
+  total?: number;
+  pendentes?: number;
+  concluidos?: number;
+  dispensados?: number;
+  atrasados?: number;
+  pending?: number;
+  overdue?: number;
+  completed?: number;
+  dismissed?: number;
 }
 
 export default function LembretesPage() {
   const [reminders, setReminders] = useState<ReminderItem[]>([]);
   const [stats, setStats] = useState<ReminderStats | null>(null);
-  const [clients, setClients] = useState<ClientOption[]>([]);
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Filters
   const [statusTab, setStatusTab] = useState<'pendente' | 'atrasado' | 'concluido' | 'dispensado' | 'todos'>('pendente');
   const [priorityFilter, setPriorityFilter] = useState<'todas' | 'alta' | 'media' | 'baixa'>('todas');
 
-  // New Reminder Modal
+  // New Reminder Modal State
   const [showNewModal, setShowNewModal] = useState(false);
+  const [clients, setClients] = useState<Array<{ id: string; nome: string }>>([]);
+  const [appointments, setAppointments] = useState<Array<{ id: string; dataHora: string; client?: { nome: string } }>>([]);
+  const [attendances, setAttendances] = useState<Array<{ id: string; dataHora: string; client?: { nome: string } }>>([]);
   const [newTitulo, setNewTitulo] = useState('');
   const [newDescricao, setNewDescricao] = useState('');
-  const [newTipo, setNewTipo] = useState('retorno');
+  const [newDataVencimento, setNewDataVencimento] = useState('');
   const [newPrioridade, setNewPrioridade] = useState<'baixa' | 'media' | 'alta'>('media');
-  const [newDataVencimento, setNewDataVencimento] = useState(
-    new Date(Date.now() + 86400000).toISOString().split('T')[0]
-  );
   const [newClientId, setNewClientId] = useState<string>('none');
+  const [newAppointmentId, setNewAppointmentId] = useState<string>('none');
+  const [newAttendanceId, setNewAttendanceId] = useState<string>('none');
+
+  // Recurrence State
+  const [isRecurrent, setIsRecurrent] = useState(false);
+  const [newFrequencia, setNewFrequencia] = useState<'DIARIA' | 'SEMANAL' | 'MENSAL' | 'ANUAL'>('MENSAL');
+  const [newIntervalo, setNewIntervalo] = useState('1');
+  const [newDataFim, setNewDataFim] = useState('');
+  const [newMaxOcorrencias, setNewMaxOcorrencias] = useState('');
+
+  const [actionLoading, setActionLoading] = useState(false);
   const [newError, setNewError] = useState<string | null>(null);
 
-  // Fetch Clients
-  useEffect(() => {
-    const loadClients = async () => {
-      try {
-        const res = await fetch('/api/clients?limit=100&active=true');
-        if (res.ok) {
-          const json = await res.json();
-          if (json.success && json.items) {
-            setClients(json.items);
-          }
-        }
-      } catch (err) {
-        console.error('Error fetching clients for reminders:', err);
-      }
-    };
-    loadClients();
-  }, []);
-
-  // Fetch Reminders
   const loadReminders = async () => {
     try {
       setLoading(true);
@@ -139,25 +148,23 @@ export default function LembretesPage() {
         params.set('prioridade', priorityFilter);
       }
 
-      params.set('limit', '100');
-
       const res = await fetch(`/api/reminders?${params.toString()}`);
       if (!res.ok) {
-        throw new Error('Falha ao carregar lembretes.');
+        throw new Error('Falha ao carregar lembretes');
       }
 
       const json = await res.json();
-      if (json.success && json.data) {
-        setReminders(json.data);
+      if (json.success) {
+        setReminders(json.data || []);
         if (json.stats) {
           setStats(json.stats);
         }
       } else {
-        throw new Error(json.error || 'Erro ao carregar lembretes.');
+        throw new Error(json.error || 'Erro ao buscar lembretes');
       }
     } catch (err: any) {
       console.error('Error loading reminders:', err);
-      setError(err.message || 'Erro ao consultar lembretes.');
+      setError(err.message || 'Erro ao carregar lembretes.');
     } finally {
       setLoading(false);
     }
@@ -168,51 +175,96 @@ export default function LembretesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusTab, priorityFilter]);
 
-  // Status Action (Concluir / Dispensar) - V23 / AC 68 (preserves payment truth)
-  const handleUpdateStatus = async (reminderId: string, newStatus: 'concluido' | 'dispensado') => {
+  useEffect(() => {
+    const fetchFormOptions = async () => {
+      try {
+        const [cliRes, apptRes, attRes] = await Promise.all([
+          fetch('/api/clients?limit=100'),
+          fetch('/api/appointments?limit=50'),
+          fetch('/api/attendances?limit=50'),
+        ]);
+        if (cliRes.ok) {
+          const json = await cliRes.json();
+          if (json.success && json.data) setClients(json.data);
+        }
+        if (apptRes.ok) {
+          const json = await apptRes.json();
+          if (json.success && json.data) setAppointments(json.data);
+        }
+        if (attRes.ok) {
+          const json = await attRes.json();
+          if (json.success && json.data) setAttendances(json.data);
+        }
+      } catch (err) {
+        console.error('Error loading form options for reminder modal:', err);
+      }
+    };
+    fetchFormOptions();
+  }, []);
+
+  const handleUpdateStatus = async (id: string, novoStatus: 'concluido' | 'dispensado' | 'pendente') => {
     try {
       setActionLoading(true);
-      const res = await fetch(`/api/reminders/${reminderId}/status`, {
+      const res = await fetch(`/api/reminders/${id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status: novoStatus }),
       });
       const json = await res.json();
       if (!res.ok || !json.success) {
-        throw new Error(json.error || 'Erro ao atualizar status do lembrete.');
+        throw new Error(json.error || 'Erro ao atualizar status do lembrete');
       }
       await loadReminders();
     } catch (err: any) {
-      alert(err.message || 'Erro ao atualizar lembrete.');
+      alert(err.message || 'Falha ao atualizar status.');
     } finally {
       setActionLoading(false);
     }
   };
 
-  // Create Reminder
   const handleCreateReminder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitulo.trim()) {
-      setNewError('O título do lembrete é obrigatório.');
-      return;
-    }
-    if (!newDataVencimento) {
-      setNewError('A data de vencimento é obrigatória.');
+    setNewError(null);
+
+    if (!newTitulo.trim() || !newDataVencimento) {
+      setNewError('Informe o título e a data de vencimento.');
       return;
     }
 
     try {
       setActionLoading(true);
-      setNewError(null);
+      const [year, month, day] = newDataVencimento.split('-').map(Number);
+      const dueDate = new Date(year, month - 1, day, 12, 0, 0);
 
-      const payload = {
+      const payload: Record<string, any> = {
         titulo: newTitulo.trim(),
-        descricao: newDescricao.trim() || undefined,
-        tipo: newTipo,
+        descricao: newDescricao.trim() ? newDescricao.trim() : null,
+        dataVencimento: dueDate.toISOString(),
         prioridade: newPrioridade,
-        dataVencimento: new Date(newDataVencimento).toISOString(),
-        clientId: newClientId !== 'none' ? newClientId : undefined,
+        clientId: newClientId !== 'none' ? newClientId : null,
+        appointmentId: newAppointmentId !== 'none' ? newAppointmentId : null,
+        attendanceId: newAttendanceId !== 'none' ? newAttendanceId : null,
+        tipo: newAppointmentId !== 'none'
+          ? 'agendamento'
+          : newAttendanceId !== 'none'
+          ? 'atendimento'
+          : newClientId !== 'none'
+          ? 'retorno'
+          : 'geral',
       };
+
+      if (isRecurrent) {
+        payload.recorrente = true;
+        payload.dataInicio = dueDate.toISOString();
+        payload.frequencia = newFrequencia;
+        payload.intervalo = Number(newIntervalo) || 1;
+        if (newDataFim) {
+          payload.dataFim = new Date(newDataFim + 'T23:59:59').toISOString();
+        }
+        if (newMaxOcorrencias) {
+          payload.maxOcorrencias = Number(newMaxOcorrencias);
+        }
+      }
 
       const res = await fetch('/api/reminders', {
         method: 'POST',
@@ -222,36 +274,55 @@ export default function LembretesPage() {
 
       const json = await res.json();
       if (!res.ok || !json.success) {
-        throw new Error(json.error || 'Erro ao registrar lembrete.');
+        throw new Error(json.error || 'Erro ao criar lembrete');
       }
 
       setShowNewModal(false);
       setNewTitulo('');
       setNewDescricao('');
+      setNewDataVencimento('');
+      setNewPrioridade('media');
       setNewClientId('none');
+      setNewAppointmentId('none');
+      setNewAttendanceId('none');
+      setIsRecurrent(false);
+      setNewDataFim('');
+      setNewMaxOcorrencias('');
       await loadReminders();
     } catch (err: any) {
-      setNewError(err.message || 'Falha ao salvar lembrete.');
+      setNewError(err.message || 'Erro ao criar lembrete.');
     } finally {
       setActionLoading(false);
     }
   };
 
-  const getPriorityBadge = (p: string) => {
-    switch (p) {
+  const getPriorityBadge = (prio: string) => {
+    switch (prio) {
       case 'alta':
-        return <Badge variant="destructive">Alta</Badge>;
+        return (
+          <Badge variant="destructive" className="text-[10px]">
+            Alta
+          </Badge>
+        );
       case 'media':
-        return <Badge className="bg-warning text-warning-foreground">Média</Badge>;
+        return (
+          <Badge variant="secondary" className="text-[10px] bg-warning/20 text-warning-foreground">
+            Média
+          </Badge>
+        );
       case 'baixa':
-        return <Badge variant="secondary">Baixa</Badge>;
+        return (
+          <Badge variant="outline" className="text-[10px]">
+            Baixa
+          </Badge>
+        );
       default:
-        return <Badge variant="outline">{p}</Badge>;
+        return null;
     }
   };
 
-  const getPriorityDot = (p: string) => {
-    switch (p) {
+  const getPriorityDot = (prio: string) => {
+    switch (prio) {
       case 'alta':
         return 'bg-destructive';
       case 'media':
@@ -268,7 +339,7 @@ export default function LembretesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <PageHeader
           title="Lembretes & Tarefas"
-          description="Acompanhamento de parcelas PIX, follow-ups de procedimentos e retornos clínicos."
+          description="Acompanhamento de parcelas PIX, agendamentos, atendimentos e lembretes recorrentes."
         >
           <Button onClick={() => setShowNewModal(true)}>
             <Plus className="mr-2 h-4 w-4" />
@@ -288,19 +359,27 @@ export default function LembretesPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-card border rounded-lg p-3 text-center space-y-1">
           <span className="text-xs text-muted-foreground font-medium">Pendentes</span>
-          <p className="text-xl font-bold text-primary">{stats?.pending ?? '—'}</p>
+          <p className="text-xl font-bold text-primary">
+            {stats?.pendentes ?? stats?.pending ?? '—'}
+          </p>
         </div>
         <div className="bg-card border rounded-lg p-3 text-center space-y-1 border-destructive/30 bg-destructive/5">
           <span className="text-xs text-destructive font-medium">Em Atraso</span>
-          <p className="text-xl font-bold text-destructive">{stats?.overdue ?? '—'}</p>
+          <p className="text-xl font-bold text-destructive">
+            {stats?.atrasados ?? stats?.overdue ?? '—'}
+          </p>
         </div>
         <div className="bg-card border rounded-lg p-3 text-center space-y-1">
           <span className="text-xs text-muted-foreground font-medium">Concluídos</span>
-          <p className="text-xl font-bold text-success">{stats?.completed ?? '—'}</p>
+          <p className="text-xl font-bold text-success">
+            {stats?.concluidos ?? stats?.completed ?? '—'}
+          </p>
         </div>
         <div className="bg-card border rounded-lg p-3 text-center space-y-1">
           <span className="text-xs text-muted-foreground font-medium">Dispensados</span>
-          <p className="text-xl font-bold text-muted-foreground">{stats?.dismissed ?? '—'}</p>
+          <p className="text-xl font-bold text-muted-foreground">
+            {stats?.dispensados ?? stats?.dismissed ?? '—'}
+          </p>
         </div>
       </div>
 
@@ -357,7 +436,7 @@ export default function LembretesPage() {
         <EmptyState
           icon={Bell}
           title="Nenhum lembrete encontrado"
-          description={`Não há tarefas ou lembretes na visualização selecionada.`}
+          description="Não há tarefas ou lembretes na visualização selecionada."
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -383,7 +462,15 @@ export default function LembretesPage() {
                         />
                         <h3 className="font-semibold text-sm leading-tight">{lembrete.titulo}</h3>
                       </div>
-                      {getPriorityBadge(lembrete.prioridade)}
+                      <div className="flex items-center gap-1">
+                        {lembrete.recurrenceId && (
+                          <Badge variant="outline" className="text-[10px] gap-1">
+                            <Repeat className="h-3 w-3" />
+                            #{lembrete.occurrenceIndex ?? 1}
+                          </Badge>
+                        )}
+                        {getPriorityBadge(lembrete.prioridade)}
+                      </div>
                     </div>
 
                     {lembrete.descricao && (
@@ -392,13 +479,31 @@ export default function LembretesPage() {
                       </p>
                     )}
 
-                    {/* Client & PIX details */}
-                    <div className="space-y-1 pt-1">
+                    {/* Linked Entities (Client, Appointment, Attendance, PIX) */}
+                    <div className="space-y-1.5 pt-1">
                       {lembrete.client && (
                         <div className="flex items-center gap-1.5 text-xs text-primary font-medium">
                           <User className="h-3.5 w-3.5" />
                           <Link href={`/clientes/${lembrete.client.id}`} className="hover:underline">
                             {lembrete.client.nome}
+                          </Link>
+                        </div>
+                      )}
+
+                      {lembrete.appointment && (
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Calendar className="h-3.5 w-3.5 text-primary" />
+                          <Link href="/agenda" className="hover:underline">
+                            Agendamento: {formatDate(new Date(lembrete.appointment.dataHora))} ({lembrete.appointment.status})
+                          </Link>
+                        </div>
+                      )}
+
+                      {lembrete.attendance && (
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Stethoscope className="h-3.5 w-3.5 text-primary" />
+                          <Link href={`/atendimentos/${lembrete.attendance.id}`} className="hover:underline">
+                            Atendimento: {formatDate(new Date(lembrete.attendance.dataHora))} ({lembrete.attendance.status})
                           </Link>
                         </div>
                       )}
@@ -434,7 +539,6 @@ export default function LembretesPage() {
                       )}
                     </div>
 
-                    {/* Status Toggles (V23 / AC 68) */}
                     {lembrete.status === 'pendente' && (
                       <div className="grid grid-cols-2 gap-2 pt-1">
                         <Button
@@ -467,13 +571,13 @@ export default function LembretesPage() {
         </div>
       )}
 
-      {/* Modal: Novo Lembrete */}
+      {/* Modal: Novo Lembrete (Avulso ou Recorrente) */}
       <Dialog open={showNewModal} onOpenChange={setShowNewModal}>
-        <DialogContent className="sm:max-w-[450px]">
+        <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Novo Lembrete</DialogTitle>
             <DialogDescription>
-              Crie uma tarefa, lembrete de retorno ou aviso de follow-up com cliente.
+              Crie um lembrete avulso ou recorrente vinculado a cliente, agendamento ou atendimento.
             </DialogDescription>
           </DialogHeader>
 
@@ -486,7 +590,7 @@ export default function LembretesPage() {
               <Label htmlFor="rem-title">Título *</Label>
               <Input
                 id="rem-title"
-                placeholder="Ex.: Ligar para paciente confirmar pós-operatório..."
+                placeholder="Ex.: Retorno de avaliação de toxina botulínica..."
                 value={newTitulo}
                 onChange={(e) => setNewTitulo(e.target.value)}
                 required
@@ -510,9 +614,47 @@ export default function LembretesPage() {
               </Select>
             </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="rem-appt">Agendamento (Opcional)</Label>
+                <Select value={newAppointmentId} onValueChange={setNewAppointmentId}>
+                  <SelectTrigger id="rem-appt">
+                    <SelectValue placeholder="Vincular agendamento..." />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    <SelectItem value="none">Nenhum</SelectItem>
+                    {appointments.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {formatDate(new Date(a.dataHora))} - {a.client?.nome || 'Cliente'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="rem-att">Atendimento (Opcional)</Label>
+                <Select value={newAttendanceId} onValueChange={setNewAttendanceId}>
+                  <SelectTrigger id="rem-att">
+                    <SelectValue placeholder="Vincular atendimento..." />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    <SelectItem value="none">Nenhum</SelectItem>
+                    {attendances.map((att) => (
+                      <SelectItem key={att.id} value={att.id}>
+                        {formatDate(new Date(att.dataHora))} - {att.client?.nome || 'Cliente'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="rem-date">Data de Vencimento *</Label>
+                <Label htmlFor="rem-date">
+                  {isRecurrent ? 'Data da 1ª Ocorrência *' : 'Data de Vencimento *'}
+                </Label>
                 <Input
                   id="rem-date"
                   type="date"
@@ -524,10 +666,7 @@ export default function LembretesPage() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="rem-prio">Prioridade</Label>
-                <Select
-                  value={newPrioridade}
-                  onValueChange={(v) => setNewPrioridade(v as any)}
-                >
+                <Select value={newPrioridade} onValueChange={(v) => setNewPrioridade(v as any)}>
                   <SelectTrigger id="rem-prio">
                     <SelectValue />
                   </SelectTrigger>
@@ -538,6 +677,76 @@ export default function LembretesPage() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            {/* Recurrence Configuration */}
+            <div className="p-3 rounded-md border bg-muted/20 space-y-3">
+              <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isRecurrent}
+                  onChange={(e) => setIsRecurrent(e.target.checked)}
+                  className="rounded border-input"
+                />
+                <Repeat className="h-4 w-4 text-primary" />
+                <span>Repetir este lembrete periodicamente (Recorrência)</span>
+              </label>
+
+              {isRecurrent && (
+                <div className="space-y-3 pt-1">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Frequência</Label>
+                      <Select value={newFrequencia} onValueChange={(v) => setNewFrequencia(v as any)}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="DIARIA">Diária</SelectItem>
+                          <SelectItem value="SEMANAL">Semanal</SelectItem>
+                          <SelectItem value="MENSAL">Mensal</SelectItem>
+                          <SelectItem value="ANUAL">Anual</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Intervalo (a cada N períodos)</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="365"
+                        value={newIntervalo}
+                        onChange={(e) => setNewIntervalo(e.target.value)}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Data Limite (Opcional)</Label>
+                      <Input
+                        type="date"
+                        value={newDataFim}
+                        onChange={(e) => setNewDataFim(e.target.value)}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Máx. Ocorrências (Opcional)</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="500"
+                        placeholder="Sem limite"
+                        value={newMaxOcorrencias}
+                        onChange={(e) => setNewMaxOcorrencias(e.target.value)}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-1.5">
@@ -556,7 +765,7 @@ export default function LembretesPage() {
                 Cancelar
               </Button>
               <Button type="submit" disabled={actionLoading}>
-                {actionLoading ? 'Salvando...' : 'Criar Lembrete'}
+                {actionLoading ? 'Salvando...' : isRecurrent ? 'Criar Recorrência' : 'Criar Lembrete'}
               </Button>
             </DialogFooter>
           </form>

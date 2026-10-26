@@ -6,7 +6,7 @@ import { AppointmentService } from '@/services/appointment.service';
 import { AttendanceService } from '@/services/attendance.service';
 import { PaymentService } from '@/services/payment.service';
 import { ReminderService } from '@/services/reminder.service';
-import { ValidationError, NotFoundError } from '@/lib/errors';
+import { ValidationError, NotFoundError, ConflictError } from '@/lib/errors';
 import { Prisma } from '@prisma/client';
 
 describe('Tier 5 Adversarial Test Suite: M6 Clinical & Financial Workflows Hardening', () => {
@@ -101,77 +101,80 @@ describe('Tier 5 Adversarial Test Suite: M6 Clinical & Financial Workflows Harde
       expect(reloadedAtt!.completedAt).toBeNull();
     });
 
-    it('D1.3: Cancelling an appointment with multiple attendances only cancels Pendente, leaving Realizado intact (D1 Rule 5)', async () => {
+    it('D1.3: Cancelling an appointment cancels Pendente attendance, leaves Realizado intact (D1 Rule 5), and enforces 1:1 cardinality', async () => {
       const client = await createTestClient();
-      const appt = await AppointmentService.createAppointment({
+      const appt1 = await AppointmentService.createAppointment({
         clientId: client.id,
         dataHora: new Date(Date.now() + 86400000),
       });
 
-      const attRealizado = appt.attendances[0];
+      const attRealizado = appt1.attendances[0];
       // Mark first attendance as Realizado
       await AttendanceService.completeAttendance(attRealizado.id);
 
-      // Create two additional attendances on same appointment (1:N cardinality)
-      const attPendente1 = await AttendanceService.createAttendance({
-        appointmentId: appt.id,
-        clientId: client.id,
-        observacoes: 'Sessão adicional 1',
-      });
-      const attPendente2 = await AttendanceService.createAttendance({
-        appointmentId: appt.id,
-        clientId: client.id,
-        observacoes: 'Sessão adicional 2',
-      });
+      // 1:1 cardinality: Attempting to create an additional attendance on same appointment is rejected
+      await expect(
+        AttendanceService.createAttendance({
+          appointmentId: appt1.id,
+          clientId: client.id,
+          observacoes: 'Sessão adicional 1',
+        })
+      ).rejects.toThrow(ConflictError);
 
-      expect(attPendente1.status).toBe('Pendente');
-      expect(attPendente2.status).toBe('Pendente');
-
-      // Now cancel the appointment
-      await AppointmentService.cancelAppointment(appt.id, {
+      // Cancel appt1 -> completed attendance remains Realizado
+      await AppointmentService.cancelAppointment(appt1.id, {
         motivoCancelamento: 'Cancelamento das sessões restantes',
       });
 
-      // Reload all attendances from DB
       const dbRealizado = await prismaTest.attendance.findUnique({ where: { id: attRealizado.id } });
-      const dbPendente1 = await prismaTest.attendance.findUnique({ where: { id: attPendente1.id } });
-      const dbPendente2 = await prismaTest.attendance.findUnique({ where: { id: attPendente2.id } });
-
-      // Invariant: The completed encounter is historical truth and remains Realizado
       expect(dbRealizado!.status).toBe('Realizado');
       expect(dbRealizado!.completedAt).not.toBeNull();
 
-      // Pending attendances were safely cancelled
-      expect(dbPendente1!.status).toBe('Cancelado');
-      expect(dbPendente2!.status).toBe('Cancelado');
+      // Separate appointment with Pendente attendance -> cancelled when appointment is cancelled
+      const appt2 = await AppointmentService.createAppointment({
+        clientId: client.id,
+        dataHora: new Date(Date.now() + 172800000),
+      });
+      const attPendente = appt2.attendances[0];
+      await AppointmentService.cancelAppointment(appt2.id, {
+        motivoCancelamento: 'Cancelamento antes do atendimento',
+      });
+
+      const dbPendente = await prismaTest.attendance.findUnique({ where: { id: attPendente.id } });
+      expect(dbPendente!.status).toBe('Cancelado');
     });
 
     it('D1.4: Marking an appointment as no-show (Não compareceu) transitions pending attendance to Cancelado while preserving Realizado', async () => {
       const client = await createTestClient();
-      const appt = await AppointmentService.createAppointment({
+      const appt1 = await AppointmentService.createAppointment({
         clientId: client.id,
         dataHora: new Date(Date.now() + 86400000),
       });
 
-      const att1 = appt.attendances[0];
+      const att1 = appt1.attendances[0];
       await AttendanceService.completeAttendance(att1.id);
 
-      const att2 = await AttendanceService.createAttendance({
-        appointmentId: appt.id,
-        clientId: client.id,
-        observacoes: 'Sessão de reforço pendente',
+      const updated1 = await AppointmentService.markNoShow(appt1.id, {
+        observacoes: 'Observação administrativa pós-atendimento',
       });
-
-      const updated = await AppointmentService.markNoShow(appt.id, {
-        observacoes: 'Cliente não atendeu telefone nem compareceu',
-      });
-
-      expect(updated.status).toBe('Não compareceu');
+      expect(updated1.status).toBe('Não compareceu');
 
       const reloaded1 = await prismaTest.attendance.findUnique({ where: { id: att1.id } });
-      const reloaded2 = await prismaTest.attendance.findUnique({ where: { id: att2.id } });
-
       expect(reloaded1!.status).toBe('Realizado');
+
+      // Pending attendance case
+      const appt2 = await AppointmentService.createAppointment({
+        clientId: client.id,
+        dataHora: new Date(Date.now() + 172800000),
+      });
+      const att2 = appt2.attendances[0];
+
+      const updated2 = await AppointmentService.markNoShow(appt2.id, {
+        observacoes: 'Cliente não atendeu telefone nem compareceu',
+      });
+      expect(updated2.status).toBe('Não compareceu');
+
+      const reloaded2 = await prismaTest.attendance.findUnique({ where: { id: att2.id } });
       expect(reloaded2!.status).toBe('Cancelado');
     });
 
@@ -215,7 +218,7 @@ describe('Tier 5 Adversarial Test Suite: M6 Clinical & Financial Workflows Harde
       expect(reloadedOldAtt!.status).toBe('Cancelado');
     });
 
-    it('D1.6: Rescheduling cascade with pre-completed attendance leaves completed attendance Realizado and cancels pending attendance', async () => {
+    it('D1.6: Rescheduling cascade with pre-completed attendance leaves completed attendance Realizado and creates new Pendente attendance on new appointment', async () => {
       const client = await createTestClient();
       const oldAppt = await AppointmentService.createAppointment({
         clientId: client.id,
@@ -225,22 +228,14 @@ describe('Tier 5 Adversarial Test Suite: M6 Clinical & Financial Workflows Harde
       const completedAtt = oldAppt.attendances[0];
       await AttendanceService.completeAttendance(completedAtt.id);
 
-      const pendingAtt = await AttendanceService.createAttendance({
-        appointmentId: oldAppt.id,
-        clientId: client.id,
-        observacoes: 'Retorno pendente que será reagendado',
-      });
-
       const newAppt = await AppointmentService.rescheduleAppointment(oldAppt.id, {
         novaDataHora: new Date('2026-11-08T10:00:00Z'),
         motivo: 'Reagendando retorno',
       });
 
       const dbCompleted = await prismaTest.attendance.findUnique({ where: { id: completedAtt.id } });
-      const dbPending = await prismaTest.attendance.findUnique({ where: { id: pendingAtt.id } });
 
       expect(dbCompleted!.status).toBe('Realizado');
-      expect(dbPending!.status).toBe('Cancelado');
       expect(newAppt.attendances[0].status).toBe('Pendente');
     });
 

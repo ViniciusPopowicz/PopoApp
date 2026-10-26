@@ -44,11 +44,18 @@ async function cleanDatabase(): Promise<void> {
   );
   await prisma.$executeRawUnsafe('UPDATE [Client] SET [profilePhotoId] = NULL');
   await prisma.$executeRawUnsafe('UPDATE [StockUnit] SET [currentClientId] = NULL');
+  await prisma.$executeRawUnsafe('UPDATE [FinancialMovement] SET [reversedFromId] = NULL');
+  await prisma.$executeRawUnsafe('UPDATE [InventoryMovement] SET [reversedFromId] = NULL');
 
   const tablesInOrder = [
+    'FinancialMovement',
+    'FinancialSettlement',
+    'FinancialObligation',
     'Reminder',
+    'ReminderRecurrence',
     'PixInstallment',
     'Payment',
+    'InventoryMovement',
     'ProductUsage',
     'StockUnit',
     'ProductLot',

@@ -32,7 +32,7 @@ export interface AttendanceProcedureDto {
 
 export interface AttendanceSummaryDto {
   id: string;
-  appointmentId: string;
+  appointmentId: string | null;
   clientId: string;
   clientName: string;
   clientCpf?: string;
@@ -69,10 +69,15 @@ export interface AttendanceDetailDto extends AttendanceSummaryDto {
   }[];
   productUsages: {
     id: string;
-    stockUnitId: string;
-    codigoSerial: string;
+    stockUnitId: string | null;
+    codigoSerial: string | null;
+    productId?: string | null;
+    lotId?: string | null;
     productName: string;
     numeroLote: string;
+    quantidade?: number;
+    unidade?: string | null;
+    status?: string;
     dataHora: string;
     observacoes: string | null;
   }[];
