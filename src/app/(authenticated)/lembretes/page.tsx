@@ -25,6 +25,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
@@ -134,6 +135,7 @@ function LembretesContent() {
       if (dateFilter) {
         params.set('date', dateFilter);
       }
+      params.set('limit', '200');
 
       const res = await fetch(`/api/reminders?${params.toString()}`);
       const json = await res.json();
@@ -698,17 +700,12 @@ function LembretesContent() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="rem-vencimento">Data de Vencimento *</Label>
-                <Input
+                <DatePicker
                   id="rem-vencimento"
-                  type="text"
-                  inputMode="numeric"
                   placeholder="DD/MM/AAAA"
-                  maxLength={10}
                   required
                   value={dataVencimentoMasked}
-                  onChange={(e) =>
-                    setDataVencimentoMasked(maskDateBR(e.target.value))
-                  }
+                  onChange={setDataVencimentoMasked}
                 />
               </div>
 
@@ -812,16 +809,11 @@ function LembretesContent() {
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Data de Término (Opcional)</Label>
-                      <Input
-                        type="text"
-                        inputMode="numeric"
+                      <DatePicker
                         placeholder="DD/MM/AAAA"
-                        maxLength={10}
-                        className="h-10 text-xs"
+                        className="text-xs"
                         value={dataFimMasked}
-                        onChange={(e) =>
-                          setDataFimMasked(maskDateBR(e.target.value))
-                        }
+                        onChange={setDataFimMasked}
                       />
                     </div>
                     <div className="space-y-1">

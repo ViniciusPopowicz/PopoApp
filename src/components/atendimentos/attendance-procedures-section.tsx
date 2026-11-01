@@ -458,7 +458,7 @@ export function AttendanceProceduresSection({
           <DialogHeader>
             <DialogTitle>Desconto Explícito</DialogTitle>
             <DialogDescription>
-              Informe o desconto explícito (D2) aplicado sobre o total praticado.
+              Informe o desconto explícito aplicado sobre o total praticado.
             </DialogDescription>
           </DialogHeader>
 

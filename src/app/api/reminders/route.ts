@@ -43,9 +43,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Automatically process any due recurring occurrences before listing
+    // Automatically process any due recurring occurrences before listing (including future horizon if queried)
     try {
-      await ReminderService.generateDueOccurrences();
+      let syncHorizon = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000); // 60 days default
+      if (parsed.data.endDate) {
+        syncHorizon = new Date(parsed.data.endDate);
+      } else if (parsed.data.upcomingDays) {
+        syncHorizon = new Date(Date.now() + parsed.data.upcomingDays * 24 * 60 * 60 * 1000);
+      } else if (parsed.data.date) {
+        const queryDate = new Date(parsed.data.date);
+        if (queryDate > syncHorizon) syncHorizon = queryDate;
+      }
+      await ReminderService.generateDueOccurrences(syncHorizon);
     } catch (recErr) {
       console.warn('[GET /api/reminders] Non-fatal recurrence sync warning:', recErr);
     }
@@ -82,7 +91,18 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      const recurrence = await ReminderService.createRecurrence(recInput.data);
+
+      // Pre-generate series: up to dataFim, maxOcorrencias, or 60 days past dataInicio / now
+      const anchorTime = new Date(recInput.data.dataInicio).getTime();
+      const baseTime = Math.max(Date.now(), anchorTime);
+      let creationHorizon = new Date(baseTime + 60 * 24 * 60 * 60 * 1000);
+      if (recInput.data.dataFim) {
+        creationHorizon = new Date(recInput.data.dataFim);
+      } else if (recInput.data.maxOcorrencias && recInput.data.maxOcorrencias <= 24) {
+        creationHorizon = new Date(baseTime + 365 * 24 * 60 * 60 * 1000);
+      }
+
+      const recurrence = await ReminderService.createRecurrence(recInput.data, creationHorizon);
       return NextResponse.json(
         {
           success: true,

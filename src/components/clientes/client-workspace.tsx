@@ -489,7 +489,7 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
             <Card>
               <CardHeader className="pb-3 flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="text-base font-semibold">Contatos de Emergência (1:N)</CardTitle>
+                  <CardTitle className="text-base font-semibold">Contatos de Emergência</CardTitle>
                   <CardDescription>Pessoas autorizadas para comunicação emergencial</CardDescription>
                 </div>
                 <Button
@@ -570,7 +570,7 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
                               {contact.parentesco}
                             </Badge>
                           </div>
-                          <p className="text-muted-foreground font-mono">{contact.telefone}</p>
+                          <p className="text-muted-foreground text-xs">{contact.telefone}</p>
                           {contact.observacoes && (
                             <p className="text-[11px] text-muted-foreground italic">
                               Obs: {contact.observacoes}
@@ -773,7 +773,7 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
           <Card>
             <CardHeader>
               <CardTitle className="text-base font-semibold">
-                Produtos Utilizados & Rastreabilidade de Lotes (§14–§17, §44)
+                Produtos Utilizados & Rastreabilidade de Lotes
               </CardTitle>
               <CardDescription>
                 Rastreabilidade de cada unidade física aplicada, com número de lote e código serial individual.
@@ -846,7 +846,7 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
                   Unidades Reutilizáveis Vinculadas a este Paciente
                 </CardTitle>
                 <CardDescription>
-                  Unidades de estoque em regime de uso exclusivo deste paciente (V16 / V17).
+                  Unidades de estoque em regime de uso exclusivo deste paciente.
                 </CardDescription>
               </CardHeader>
               <CardContent>

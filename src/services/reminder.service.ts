@@ -426,7 +426,9 @@ export class ReminderService {
     });
 
     if (created.isActive) {
-      await this.generateDueOccurrencesForRecurrence(created.id, referenceDate);
+      const initialEffectiveHorizon =
+        referenceDate > new Date(input.dataInicio) ? referenceDate : new Date(input.dataInicio);
+      await this.generateDueOccurrencesForRecurrence(created.id, initialEffectiveHorizon);
     }
 
     return this.getRecurrenceById(created.id);

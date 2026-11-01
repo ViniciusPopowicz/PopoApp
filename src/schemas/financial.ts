@@ -35,6 +35,8 @@ export const createFinancialObligationSchema = z.object({
     invalid_type_error: 'Data de vencimento inválida',
   }),
   metodo: z.string().trim().max(50).optional().nullable(),
+  status: obligationStatusSchema.optional(),
+  dataPagamento: z.coerce.date().optional().nullable(),
   observacoes: z.string().trim().max(2000).optional().nullable(),
 });
 

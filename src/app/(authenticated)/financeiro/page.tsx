@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
@@ -224,6 +226,7 @@ export default function FinanceiroPage() {
     isoToDateBR(new Date().toISOString().split('T')[0])
   );
   const [obMetodo, setObMetodo] = useState('Pix');
+  const [obJaPago, setObJaPago] = useState<boolean>(false);
   const [obObservacoes, setObObservacoes] = useState('');
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<boolean>(false);
@@ -368,6 +371,7 @@ export default function FinanceiroPage() {
     setObValorDisplay('');
     setObVencimentoDisplay(isoToDateBR(new Date().toISOString().split('T')[0]));
     setObMetodo('Pix');
+    setObJaPago(false);
     setObObservacoes('');
     setDialogError(null);
     setShowObligationDialog(true);
@@ -398,6 +402,8 @@ export default function FinanceiroPage() {
           valorOriginal: rawValor,
           dataVencimento: new Date(isoVencimento + 'T12:00:00').toISOString(),
           metodo: obMetodo || null,
+          status: obJaPago ? 'Pago' : undefined,
+          dataPagamento: obJaPago ? new Date(isoVencimento + 'T12:00:00').toISOString() : undefined,
           observacoes: obObservacoes || null,
         }),
       });
@@ -595,22 +601,18 @@ export default function FinanceiroPage() {
 
           {period === 'custom' && (
             <div className="flex items-center gap-1.5">
-              <Input
-                type="text"
-                inputMode="numeric"
+              <DatePicker
                 placeholder="DD/MM/AAAA"
                 value={customStart}
-                onChange={(e) => setCustomStart(maskDateBR(e.target.value))}
-                className="h-9 text-xs w-28"
+                onChange={setCustomStart}
+                className="w-32"
               />
               <span className="text-xs text-muted-foreground">até</span>
-              <Input
-                type="text"
-                inputMode="numeric"
+              <DatePicker
                 placeholder="DD/MM/AAAA"
                 value={customEnd}
-                onChange={(e) => setCustomEnd(maskDateBR(e.target.value))}
-                className="h-9 text-xs w-28"
+                onChange={setCustomEnd}
+                className="w-32"
               />
             </div>
           )}
@@ -1370,13 +1372,10 @@ export default function FinanceiroPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Vencimento *</Label>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="DD/MM/AAAA"
+                <DatePicker
                   required
                   value={obVencimentoDisplay}
-                  onChange={(e) => setObVencimentoDisplay(maskDateBR(e.target.value))}
+                  onChange={setObVencimentoDisplay}
                 />
               </div>
               <div className="space-y-1.5">
@@ -1389,6 +1388,21 @@ export default function FinanceiroPage() {
                 />
               </div>
             </div>
+            {obligationDialogType === 'PAYABLE' && (
+              <div className="flex items-center space-x-2 pt-1">
+                <Checkbox
+                  id="obJaPago"
+                  checked={obJaPago}
+                  onCheckedChange={(c) => setObJaPago(Boolean(c))}
+                />
+                <label
+                  htmlFor="obJaPago"
+                  className="text-sm font-medium leading-none cursor-pointer"
+                >
+                  Despesa já paga (Realizada no Caixa)
+                </label>
+              </div>
+            )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowObligationDialog(false)}>
                 Cancelar
@@ -1429,13 +1443,10 @@ export default function FinanceiroPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Data da Liquidação *</Label>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="DD/MM/AAAA"
+                <DatePicker
                   required
                   value={settleDataDisplay}
-                  onChange={(e) => setSettleDataDisplay(maskDateBR(e.target.value))}
+                  onChange={setSettleDataDisplay}
                 />
               </div>
               <div className="space-y-1.5">
@@ -1520,13 +1531,10 @@ export default function FinanceiroPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Data *</Label>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="DD/MM/AAAA"
+                <DatePicker
                   required
                   value={movDataDisplay}
-                  onChange={(e) => setMovDataDisplay(maskDateBR(e.target.value))}
+                  onChange={setMovDataDisplay}
                 />
               </div>
               <div className="space-y-1.5">

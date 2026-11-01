@@ -194,31 +194,77 @@ export class FinancialService {
       }
     }
 
-    const isOverdue = startOfDay(new Date(input.dataVencimento)) < startOfDay(referenceDate);
-    const initialStatus: ObligationStatus = isOverdue ? 'Atrasado' : 'Pendente';
+    const isPaid = input.status === 'Pago' || Boolean((input as any).dataPagamento);
+    const isOverdue = !isPaid && startOfDay(new Date(input.dataVencimento)) < startOfDay(referenceDate);
+    const initialStatus: ObligationStatus = isPaid ? 'Pago' : isOverdue ? 'Atrasado' : 'Pendente';
 
-    const created = await prisma.financialObligation.create({
-      data: {
-        tipo: input.tipo,
-        descricao: input.descricao.trim(),
-        categoria: input.categoria ? input.categoria.trim() : null,
-        fornecedor: input.fornecedor ? input.fornecedor.trim() : null,
-        clientId: resolvedClientId,
-        appointmentId: resolvedAppointmentId,
-        attendanceId: resolvedAttendanceId,
-        valorOriginal: new Prisma.Decimal(input.valorOriginal),
-        dataVencimento: input.dataVencimento,
-        metodo: input.metodo ? input.metodo.trim() : null,
-        status: initialStatus,
-        observacoes: input.observacoes ? input.observacoes.trim() : null,
-      },
-      include: {
-        client: { select: { id: true, nome: true } },
-        settlements: { orderBy: { dataLiquidacao: 'asc' } },
-      },
+    const created = await prisma.$transaction(async (tx) => {
+      const ob = await tx.financialObligation.create({
+        data: {
+          tipo: input.tipo,
+          descricao: input.descricao.trim(),
+          categoria: input.categoria ? input.categoria.trim() : null,
+          fornecedor: input.fornecedor ? input.fornecedor.trim() : null,
+          clientId: resolvedClientId,
+          appointmentId: resolvedAppointmentId,
+          attendanceId: resolvedAttendanceId,
+          valorOriginal: new Prisma.Decimal(input.valorOriginal),
+          dataVencimento: input.dataVencimento,
+          metodo: input.metodo ? input.metodo.trim() : null,
+          status: initialStatus,
+          observacoes: input.observacoes ? input.observacoes.trim() : null,
+        },
+      });
+
+      if (isPaid) {
+        const payDate = (input as any).dataPagamento
+          ? new Date((input as any).dataPagamento)
+          : new Date(input.dataVencimento);
+        const settlement = await tx.financialSettlement.create({
+          data: {
+            obligationId: ob.id,
+            valor: new Prisma.Decimal(round2(input.valorOriginal)),
+            dataLiquidacao: payDate,
+            metodo: input.metodo ? input.metodo.trim() : 'Outro',
+            observacoes: 'Liquidação automática no cadastro da obrigação',
+            status: 'Ativo',
+          },
+        });
+
+        const movementType = ob.tipo === 'RECEIVABLE' ? 'ENTRADA' : 'SAIDA';
+        const movementOrigin =
+          ob.tipo === 'RECEIVABLE' ? 'LIQUIDACAO_RECEBER' : 'LIQUIDACAO_PAGAR';
+
+        await tx.financialMovement.create({
+          data: {
+            tipo: movementType,
+            origem: movementOrigin,
+            descricao: `Liquidação: ${ob.descricao}`,
+            categoria: ob.categoria,
+            valor: new Prisma.Decimal(round2(input.valorOriginal)),
+            dataMovimentacao: payDate,
+            metodo: input.metodo ? input.metodo.trim() : 'Outro',
+            status: 'Ativo',
+            clientId: ob.clientId,
+            appointmentId: ob.appointmentId,
+            attendanceId: ob.attendanceId,
+            obligationId: ob.id,
+            settlementId: settlement.id,
+            observacoes: ob.observacoes,
+          },
+        });
+      }
+
+      return await tx.financialObligation.findUnique({
+        where: { id: ob.id },
+        include: {
+          client: { select: { id: true, nome: true } },
+          settlements: { orderBy: { dataLiquidacao: 'asc' } },
+        },
+      });
     });
 
-    return this.formatObligation(created, referenceDate);
+    return this.formatObligation(created!, referenceDate);
   }
 
   /**
@@ -808,7 +854,7 @@ export class FinancialService {
           descricao: `Estorno de ${orig.descricao}: ${reason}`,
           categoria: orig.categoria,
           valor: orig.valor,
-          dataMovimentacao: now,
+          dataMovimentacao: orig.dataMovimentacao ?? now,
           metodo: orig.metodo,
           status: 'Ativo',
           clientId: orig.clientId,
@@ -906,7 +952,12 @@ export class FinancialService {
 
     // 1. Realized cash ledger movements within [startDate, endDate]
     let movements: any[] = [];
-    let allLinkedMovements: Array<{ paymentId: string | null; pixInstallmentId: string | null }> = [];
+    let allLinkedMovements: Array<{
+      paymentId: string | null;
+      pixInstallmentId: string | null;
+      obligationId: string | null;
+      settlementId: string | null;
+    }> = [];
     try {
       [movements, allLinkedMovements] = await Promise.all([
         prisma.financialMovement.findMany({
@@ -917,9 +968,19 @@ export class FinancialService {
         }),
         prisma.financialMovement.findMany({
           where: {
-            OR: [{ paymentId: { not: null } }, { pixInstallmentId: { not: null } }],
+            OR: [
+              { paymentId: { not: null } },
+              { pixInstallmentId: { not: null } },
+              { obligationId: { not: null } },
+              { settlementId: { not: null } },
+            ],
           },
-          select: { paymentId: true, pixInstallmentId: true },
+          select: {
+            paymentId: true,
+            pixInstallmentId: true,
+            obligationId: true,
+            settlementId: true,
+          },
         }),
       ]);
     } catch {
@@ -933,10 +994,16 @@ export class FinancialService {
     const coveredInstallmentIds = new Set(
       allLinkedMovements.map((m) => m.pixInstallmentId).filter(Boolean) as string[]
     );
+    const coveredSettlementIds = new Set(
+      allLinkedMovements.map((m) => m.settlementId).filter(Boolean) as string[]
+    );
+    const coveredObligationIds = new Set(
+      allLinkedMovements.map((m) => m.obligationId).filter(Boolean) as string[]
+    );
 
     // 2. Include any paid Payments (without pixInstallments) and paid PixInstallments in [startDate, endDate]
-    // that were created directly in DB without a FinancialMovement row (zero double-counting)
-    const [paidSinglePayments, paidPixInstallments] = await Promise.all([
+    // as well as paid/settled Accounts Payable (zero double-counting)
+    const [paidSinglePayments, paidPixInstallments, paidPayableSettlements, paidDirectPayables] = await Promise.all([
       prisma.payment.findMany({
         where: {
           status: 'Pago',
@@ -957,6 +1024,31 @@ export class FinancialService {
           ],
         },
         select: { id: true, valor: true },
+      }),
+      ((prisma as any).financialSettlement?.findMany
+        ? (prisma as any).financialSettlement.findMany({
+            where: {
+              status: 'Ativo',
+              obligation: { tipo: 'PAYABLE' },
+              dataLiquidacao: { gte: startDate, lte: endDate },
+            },
+            include: {
+              obligation: { select: { id: true, categoria: true } },
+            },
+          })
+        : Promise.resolve([])),
+      prisma.financialObligation.findMany({
+        where: {
+          tipo: 'PAYABLE',
+          status: 'Pago',
+          settlements: { none: {} },
+          OR: [
+            { dataVencimento: { gte: startDate, lte: endDate } },
+            { updatedAt: { gte: startDate, lte: endDate } },
+            { createdAt: { gte: startDate, lte: endDate } },
+          ],
+        },
+        select: { id: true, valorOriginal: true, categoria: true },
       }),
     ]);
 
@@ -1001,6 +1093,18 @@ export class FinancialService {
     for (const inst of paidPixInstallments) {
       if (!coveredInstallmentIds.has(inst.id)) {
         addInflow('pix_parcelado', Number(inst.valor));
+      }
+    }
+
+    for (const set of paidPayableSettlements) {
+      if (!coveredSettlementIds.has(set.id)) {
+        addOutflow(set.obligation?.categoria || 'Insumos / Fornecedores', Number(set.valor));
+      }
+    }
+
+    for (const ob of paidDirectPayables) {
+      if (!coveredObligationIds.has(ob.id)) {
+        addOutflow(ob.categoria || 'Insumos / Fornecedores', Number(ob.valorOriginal));
       }
     }
 

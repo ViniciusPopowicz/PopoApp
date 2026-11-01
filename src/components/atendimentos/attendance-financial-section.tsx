@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { DatePicker } from '@/components/ui/date-picker';
 import { AppCombobox } from '@/components/ui/app-combobox';
 import {
   maskCurrencyBRL,
@@ -266,7 +267,7 @@ export function AttendanceFinancialSection({
           <div>
             <CardTitle className="text-lg flex items-center gap-2">
               <DollarSign className="h-5 w-5 text-primary" />
-              Resumo Financeiro (D2)
+              Resumo Financeiro
             </CardTitle>
             <CardDescription>
               Cálculo dinâmico baseado nos procedimentos executados, desconto explícito e pagamentos confirmados.
@@ -613,14 +614,11 @@ export function AttendanceFinancialSection({
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="pix-primeiro-venc">Primeiro Vencimento (DD/MM/AAAA) *</Label>
-                  <Input
+                  <Label htmlFor="pix-primeiro-venc">Primeiro Vencimento *</Label>
+                  <DatePicker
                     id="pix-primeiro-venc"
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="DD/MM/AAAA"
                     value={primeiroVencimentoMasked}
-                    onChange={(e) => setPrimeiroVencimentoMasked(maskDateBR(e.target.value))}
+                    onChange={setPrimeiroVencimentoMasked}
                     required
                   />
                 </div>

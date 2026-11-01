@@ -12,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Badge } from '@/components/ui/badge';
 import { AppCombobox } from '@/components/ui/app-combobox';
 import {
@@ -223,25 +224,21 @@ export function LotIntakeDialog({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="lot-compra">Data de Compra / Aquisição</Label>
-              <Input
+              <DatePicker
                 id="lot-compra"
-                type="text"
-                inputMode="numeric"
                 placeholder="DD/MM/AAAA"
                 value={dataCompraMasked}
-                onChange={(e) => setDataCompraMasked(maskDateBR(e.target.value))}
+                onChange={setDataCompraMasked}
               />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="lot-validade">Data de Validade</Label>
-              <Input
+              <DatePicker
                 id="lot-validade"
-                type="text"
-                inputMode="numeric"
                 placeholder="DD/MM/AAAA"
                 value={dataValidadeMasked}
-                onChange={(e) => setDataValidadeMasked(maskDateBR(e.target.value))}
+                onChange={setDataValidadeMasked}
               />
             </div>
           </div>

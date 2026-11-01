@@ -12,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DatePicker } from '@/components/ui/date-picker';
 import { AppCombobox } from '@/components/ui/app-combobox';
 import { isValidCpf } from '@/lib/cpf';
 import {
@@ -506,14 +507,12 @@ export function ClientFormDialog({
 
             <div className="space-y-1.5">
               <Label htmlFor="client-nascimento">Data de Nascimento</Label>
-              <Input
+              <DatePicker
                 id="client-nascimento"
-                type="text"
-                inputMode="numeric"
                 placeholder="DD/MM/AAAA"
-                maxLength={10}
                 value={dataNascimentoMasked}
-                onChange={(e) => setDataNascimentoMasked(maskDateBR(e.target.value))}
+                onChange={setDataNascimentoMasked}
+                maxDate={new Date()}
               />
             </div>
 

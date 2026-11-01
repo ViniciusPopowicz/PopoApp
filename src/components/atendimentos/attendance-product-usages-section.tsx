@@ -171,7 +171,10 @@ export function AttendanceProductUsagesSection({
         const json = await prodsRes.json();
         if (json.success && json.data) {
           setQuantityProducts(
-            json.data.filter((p: any) => p.trackingMode === 'QUANTITY' && p.totalQuantityAvailable > 0)
+            json.data.filter((p: any) => {
+              const hasBalance = (p.totalQuantityAvailable ?? 0) > 0 || (p.availableUnitsCount ?? 0) > 0;
+              return hasBalance && (p.trackingMode === 'QUANTITY' || p.isReusable);
+            })
           );
         }
       }
@@ -289,7 +292,7 @@ export function AttendanceProductUsagesSection({
         <div className="p-3 rounded-md bg-muted/30 border border-muted text-xs text-muted-foreground flex items-start gap-2">
           <Info className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
           <div>
-            <strong>Regras de Estoque (V15-V18 & Consumo Parcial):</strong> Lotes vencidos são bloqueados. Unidades reutilizáveis ficam vinculadas ao mesmo cliente, e produtos controlados por quantidade permitem baixa parcial/fracionada até o esgotamento do lote.
+            <strong>Regras de Estoque:</strong> Lotes vencidos são bloqueados. Unidades reutilizáveis ficam vinculadas ao mesmo cliente, e produtos fracionáveis ou reutilizáveis permitem baixa parcial até o esgotamento do lote.
           </div>
         </div>
 
@@ -436,10 +439,14 @@ export function AttendanceProductUsagesSection({
                 <div className="col-span-2 space-y-1.5">
                   <Label>Produto Consumível *</Label>
                   <AppCombobox
-                    options={quantityProducts.map((p) => ({
-                      value: p.id,
-                      label: `${p.nome} (Saldo: ${p.totalQuantityAvailable} ${p.unidade})`,
-                    }))}
+                    options={quantityProducts.map((p) => {
+                      const balance = p.totalQuantityAvailable > 0 ? p.totalQuantityAvailable : p.availableUnitsCount;
+                      const label = `${p.nome} (Saldo: ${balance} ${p.unidade || 'un'})${p.isReusable ? ' — Reutilizável' : ''}`;
+                      return {
+                        value: p.id,
+                        label,
+                      };
+                    })}
                     value={selectedProductId}
                     onChange={setSelectedProductId}
                     placeholder="Selecione o produto..."

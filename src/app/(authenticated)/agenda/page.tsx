@@ -45,6 +45,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
@@ -511,14 +512,10 @@ export default function AgendaPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <PageHeader title="Agenda" description="Gerencie seus horários e procedimentos planejados.">
-          <Button onClick={() => setShowNewDialog(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Novo Agendamento
-          </Button>
-        </PageHeader>
-      </div>
+      <PageHeader
+        title="Agenda"
+        description="Gerencie seus horários e procedimentos planejados."
+      />
 
       {error && (
         <div className="p-4 rounded-md bg-destructive/15 text-destructive border border-destructive/20 text-sm flex items-center gap-2">
@@ -527,7 +524,7 @@ export default function AgendaPage() {
         </div>
       )}
 
-      {/* Toolbar / Controls */}
+      {/* Toolbar / Controls — Standardized position with New Appointment on the right */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-card p-4 rounded-lg border">
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleToday}>
@@ -546,7 +543,7 @@ export default function AgendaPage() {
           </span>
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
           <Tabs value={view} onValueChange={(v) => setView(v as ViewMode)}>
             <TabsList>
               <TabsTrigger value="mes">Mês</TabsTrigger>
@@ -557,6 +554,10 @@ export default function AgendaPage() {
           </Tabs>
           <Button variant="ghost" size="icon" onClick={loadAppointments} disabled={loading} title="Recarregar">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
+          <Button onClick={() => setShowNewDialog(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Novo Agendamento
           </Button>
         </div>
       </div>
@@ -865,14 +866,11 @@ export default function AgendaPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="appt-date">Data *</Label>
-                <Input
+                <DatePicker
                   id="appt-date"
-                  type="text"
-                  inputMode="numeric"
                   placeholder="DD/MM/AAAA"
-                  maxLength={10}
                   value={newDateMasked}
-                  onChange={(e) => setNewDateMasked(maskDateBR(e.target.value))}
+                  onChange={setNewDateMasked}
                   required
                 />
               </div>
@@ -1185,14 +1183,12 @@ export default function AgendaPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label htmlFor="resched-date">Nova Data *</Label>
-                <Input
+                <DatePicker
                   id="resched-date"
-                  type="text"
-                  inputMode="numeric"
                   placeholder="DD/MM/AAAA"
-                  maxLength={10}
                   value={rescheduleDateMasked}
-                  onChange={(e) => setRescheduleDateMasked(maskDateBR(e.target.value))}
+                  onChange={setRescheduleDateMasked}
+                  required
                 />
               </div>
               <div className="space-y-1">
