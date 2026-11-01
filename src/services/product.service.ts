@@ -8,18 +8,24 @@ import {
 } from '@/schemas/product';
 import { ProductSummaryDto, ProductDetailDto, ProductTrackingMode } from '@/types/product';
 
+import { ensureDatabaseSchema } from '@/lib/db-bootstrap';
+
 export function mapProductSummary(p: any): ProductSummaryDto {
   let totalUnits = 0;
   let availableUnits = 0;
   let totalQuantityAvailable = 0;
 
-  if (p.lots) {
+  if (Array.isArray(p.lots)) {
     for (const lot of p.lots) {
-      totalQuantityAvailable += Number(lot.quantidadeDisponivel ?? 0);
-      if (lot.stockUnits) {
-        totalUnits += lot.stockUnits.length;
-        availableUnits += lot.stockUnits.filter((u: any) => u.status === 'Disponivel').length;
-      }
+      const units = Array.isArray(lot.stockUnits) ? lot.stockUnits : [];
+      const availInLot = units.filter((u: any) => u.status === 'Disponivel').length;
+      totalUnits += units.length;
+      availableUnits += availInLot;
+      const lotQty =
+        lot.quantidadeDisponivel != null
+          ? Number(lot.quantidadeDisponivel)
+          : Number(lot.quantidadeOriginal ?? availInLot);
+      totalQuantityAvailable += isNaN(lotQty) ? 0 : lotQty;
     }
   }
 
@@ -50,6 +56,7 @@ export function mapProductSummary(p: any): ProductSummaryDto {
 }
 
 export async function listProducts(query: ProductQueryInput = {}): Promise<ProductSummaryDto[]> {
+  await ensureDatabaseSchema();
   const where: Prisma.ProductWhereInput = {
     ...(query.search
       ? {
@@ -66,24 +73,56 @@ export async function listProducts(query: ProductQueryInput = {}): Promise<Produ
     ...(query.active !== undefined ? { isActive: query.active } : {}),
   };
 
-  const products = await prisma.product.findMany({
-    where,
-    orderBy: [{ isActive: 'desc' }, { nome: 'asc' }],
-    include: {
-      _count: {
-        select: { lots: true },
-      },
-      lots: {
-        select: {
-          quantidadeInicial: true,
-          quantidadeDisponivel: true,
-          stockUnits: {
-            select: { status: true },
+  let products: any[] = [];
+  try {
+    products = await prisma.product.findMany({
+      where,
+      orderBy: [{ isActive: 'desc' }, { nome: 'asc' }],
+      include: {
+        _count: {
+          select: { lots: true },
+        },
+        lots: {
+          select: {
+            quantidadeInicial: true,
+            quantidadeDisponivel: true,
+            stockUnits: {
+              select: { status: true },
+            },
           },
         },
       },
-    },
-  });
+    });
+  } catch {
+    const fallbackWhere: any = { ...where };
+    delete fallbackWhere.trackingMode;
+    products = await prisma.product.findMany({
+      where: fallbackWhere,
+      orderBy: [{ isActive: 'desc' }, { nome: 'asc' }],
+      select: {
+        id: true,
+        nome: true,
+        categoria: true,
+        marca: true,
+        descricao: true,
+        unidade: true,
+        isReusable: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: { lots: true },
+        },
+        lots: {
+          select: {
+            stockUnits: {
+              select: { status: true },
+            },
+          },
+        },
+      },
+    });
+  }
 
   return products.map(mapProductSummary);
 }

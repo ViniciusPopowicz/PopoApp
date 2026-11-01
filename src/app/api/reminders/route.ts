@@ -17,6 +17,8 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
 
     const rawQuery = {
+      search: searchParams.get('search') ?? searchParams.get('q') ?? undefined,
+      date: searchParams.get('date') ?? undefined,
       status: searchParams.get('status') ?? undefined,
       prioridade: searchParams.get('prioridade') ?? undefined,
       tipo: searchParams.get('tipo') ?? undefined,
@@ -42,18 +44,23 @@ export async function GET(request: NextRequest) {
     }
 
     // Automatically process any due recurring occurrences before listing
-    await ReminderService.generateDueOccurrences();
+    try {
+      await ReminderService.generateDueOccurrences();
+    } catch (recErr) {
+      console.warn('[GET /api/reminders] Non-fatal recurrence sync warning:', recErr);
+    }
 
     const [reminders, stats] = await Promise.all([
       ReminderService.listReminders(parsed.data),
       ReminderService.getReminderStats(),
     ]);
 
-    return NextResponse.json({ success: true, data: reminders, stats });
+    return NextResponse.json({ success: true, data: reminders, items: reminders, stats });
   } catch (error: any) {
     if (error instanceof DomainError) {
       return NextResponse.json({ success: false, error: error.message }, { status: error.statusCode });
     }
+    console.error('Error in GET /api/reminders:', error);
     return NextResponse.json({ success: false, error: 'Erro interno ao listar lembretes' }, { status: 500 });
   }
 }

@@ -6,7 +6,12 @@ BEGIN TRAN;
 -- PHASE 1: 1:1 APPOINTMENT <-> ATTENDANCE RECONCILIATION & UNIQUE CONSTRAINT
 -- =========================================================================
 
--- 1. Allow NULL on Attendance.appointmentId so independent attendances remain supported
+-- 1. Drop dependent index before allowing NULL on Attendance.appointmentId
+IF EXISTS (SELECT * FROM sys.indexes WHERE name = N'Attendance_appointmentId_idx' AND object_id = OBJECT_ID(N'[dbo].[Attendance]'))
+BEGIN
+    DROP INDEX [Attendance_appointmentId_idx] ON [dbo].[Attendance];
+END;
+
 ALTER TABLE [dbo].[Attendance] ALTER COLUMN [appointmentId] NVARCHAR(1000) NULL;
 
 -- 2. Deterministic reconciliation of any duplicate Attendance rows per Appointment:
@@ -52,12 +57,7 @@ BEGIN
     THROW 50001, 'Migration halted: Conflicting duplicate Attendance records found for the same Appointment. Manual reconciliation required.', 1;
 END;
 
--- 4. Replace non-unique index with filtered UNIQUE index on Attendance(appointmentId)
-IF EXISTS (SELECT * FROM sys.indexes WHERE name = N'Attendance_appointmentId_idx' AND object_id = OBJECT_ID(N'[dbo].[Attendance]'))
-BEGIN
-    DROP INDEX [Attendance_appointmentId_idx] ON [dbo].[Attendance];
-END;
-
+-- 4. Create filtered UNIQUE index on Attendance(appointmentId)
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = N'Attendance_appointmentId_key' AND object_id = OBJECT_ID(N'[dbo].[Attendance]'))
 BEGIN
     CREATE UNIQUE NONCLUSTERED INDEX [Attendance_appointmentId_key]
@@ -94,6 +94,9 @@ BEGIN
     ALTER TABLE [dbo].[ProductLot] ADD [quantidadeDisponivel] DECIMAL(10,3) NULL;
 END;
 
+EXEC('UPDATE [dbo].[ProductLot] SET [quantidadeInicial] = [quantidadeOriginal] WHERE [quantidadeInicial] IS NULL');
+EXEC('UPDATE [dbo].[ProductLot] SET [quantidadeDisponivel] = [quantidadeOriginal] WHERE [quantidadeDisponivel] IS NULL');
+
 IF COL_LENGTH('[dbo].[StockUnit]', 'quantidadeInicial') IS NULL
 BEGIN
     ALTER TABLE [dbo].[StockUnit] ADD [quantidadeInicial] DECIMAL(10,3) NULL;
@@ -110,7 +113,17 @@ BEGIN
 END;
 
 -- Alter ProductUsage to support both unit-tracked and quantity-based consumables
+IF EXISTS (SELECT * FROM sys.indexes WHERE name = N'ProductUsage_stockUnitId_idx' AND object_id = OBJECT_ID(N'[dbo].[ProductUsage]'))
+BEGIN
+    DROP INDEX [ProductUsage_stockUnitId_idx] ON [dbo].[ProductUsage];
+END;
+
 ALTER TABLE [dbo].[ProductUsage] ALTER COLUMN [stockUnitId] NVARCHAR(1000) NULL;
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = N'ProductUsage_stockUnitId_idx' AND object_id = OBJECT_ID(N'[dbo].[ProductUsage]'))
+BEGIN
+    CREATE NONCLUSTERED INDEX [ProductUsage_stockUnitId_idx] ON [dbo].[ProductUsage]([stockUnitId]);
+END;
 
 IF COL_LENGTH('[dbo].[ProductUsage]', 'productId') IS NULL
 BEGIN

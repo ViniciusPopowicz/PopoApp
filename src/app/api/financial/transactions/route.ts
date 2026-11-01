@@ -14,11 +14,20 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '20', 10)));
     const status = searchParams.get('status') ?? undefined;
     const metodo = searchParams.get('metodo') ?? undefined;
+    const search = (searchParams.get('search') ?? searchParams.get('q') ?? '').trim();
     const skip = (page - 1) * limit;
 
     const where: any = {};
     if (status && status !== 'todos' && status !== 'ALL') where.status = status;
     if (metodo && metodo !== 'todos' && metodo !== 'ALL') where.metodo = metodo;
+    if (search) {
+      where.OR = [
+        { observacoes: { contains: search } },
+        { identificadorTransacao: { contains: search } },
+        { attendance: { client: { nome: { contains: search } } } },
+        { attendance: { client: { cpf: { contains: search } } } },
+      ];
+    }
 
     const [total, payments] = await Promise.all([
       prisma.payment.count({ where }),
@@ -60,23 +69,25 @@ export async function GET(request: NextRequest) {
       numeroParcelas: p.numeroParcelas,
       identificadorTransacao: p.identificadorTransacao,
       observacoes: p.observacoes,
-      attendance: {
-        id: p.attendance.id,
-        dataHora: p.attendance.dataHora.toISOString(),
-        status: p.attendance.status,
-        desconto: Number(p.attendance.desconto),
-        client: p.attendance.client,
-        procedures: p.attendance.procedures.map((proc) => ({
-          id: proc.id,
-          nome: proc.procedure.nome,
-          practicedValue: Number(proc.practicedValue),
-          procedure: {
-            id: proc.procedure.id,
-            nome: proc.procedure.nome,
-          },
-        })),
-      },
-      pixInstallments: p.pixInstallments.map((inst) => ({
+      attendance: p.attendance
+        ? {
+            id: p.attendance.id,
+            dataHora: p.attendance.dataHora.toISOString(),
+            status: p.attendance.status,
+            desconto: Number(p.attendance.desconto),
+            client: p.attendance.client,
+            procedures: (p.attendance.procedures || []).map((proc) => ({
+              id: proc.id,
+              nome: proc.procedure?.nome ?? 'Procedimento',
+              practicedValue: Number(proc.practicedValue),
+              procedure: {
+                id: proc.procedure?.id ?? proc.id,
+                nome: proc.procedure?.nome ?? 'Procedimento',
+              },
+            })),
+          }
+        : null,
+      pixInstallments: (p.pixInstallments || []).map((inst) => ({
         id: inst.id,
         numeroParcela: inst.numeroParcela,
         totalParcelas: inst.totalParcelas,

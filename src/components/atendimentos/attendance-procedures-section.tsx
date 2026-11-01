@@ -14,13 +14,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { AppCombobox } from '@/components/ui/app-combobox';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  maskCurrencyBRL,
+  formatNumberToBRLInput,
+  unmaskCurrencyBRL,
+} from '@/lib/masks';
 import { Plus, Trash2, Edit2, Sparkles, Tag, AlertCircle } from 'lucide-react';
 import { formatCurrency } from '@/lib/format';
 
@@ -38,7 +37,8 @@ interface AttendanceProcedure {
 interface ProcedureOption {
   id: string;
   nome: string;
-  precoPadrao: number;
+  valorPadrao?: number;
+  precoPadrao?: number;
 }
 
 interface AttendanceProceduresSectionProps {
@@ -63,18 +63,18 @@ export function AttendanceProceduresSection({
   // Add Procedure Modal
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedCatalogId, setSelectedCatalogId] = useState('');
-  const [practicedValueInput, setPracticedValueInput] = useState('');
+  const [practicedValueMasked, setPracticedValueMasked] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
 
   // Edit Value Modal
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingProcedureId, setEditingProcedureId] = useState<string | null>(null);
-  const [editValueInput, setEditValueInput] = useState('');
+  const [editValueMasked, setEditValueMasked] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
 
   // Discount Modal
   const [showDiscountDialog, setShowDiscountDialog] = useState(false);
-  const [discountInput, setDiscountInput] = useState(currentDiscount.toString());
+  const [discountMasked, setDiscountMasked] = useState(formatNumberToBRLInput(currentDiscount));
   const [discountError, setDiscountError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -83,9 +83,8 @@ export function AttendanceProceduresSection({
         const res = await fetch('/api/procedures?active=true');
         if (res.ok) {
           const data = await res.json();
-          if (data.success && data.data) {
-            setCatalog(data.data);
-          }
+          const list = Array.isArray(data?.data) ? data.data : Array.isArray(data?.procedures) ? data.procedures : [];
+          setCatalog(list);
         }
       } catch (err) {
         console.error('Error fetching procedure catalog:', err);
@@ -96,12 +95,15 @@ export function AttendanceProceduresSection({
 
   const isEditable = status === 'Pendente';
 
+  const getProcPrice = (proc: ProcedureOption) =>
+    Number(proc.valorPadrao ?? proc.precoPadrao ?? 0);
+
   // Handle Catalog Selection in Add Modal
   const handleSelectCatalogItem = (procId: string) => {
     setSelectedCatalogId(procId);
     const item = catalog.find((p) => p.id === procId);
     if (item) {
-      setPracticedValueInput(Number(item.precoPadrao || 0).toFixed(2));
+      setPracticedValueMasked(formatNumberToBRLInput(getProcPrice(item)));
     }
   };
 
@@ -112,7 +114,7 @@ export function AttendanceProceduresSection({
       setAddError('Selecione um procedimento.');
       return;
     }
-    const val = parseFloat(practicedValueInput);
+    const val = unmaskCurrencyBRL(practicedValueMasked);
     if (isNaN(val) || val < 0) {
       setAddError('Informe um valor praticado válido maior ou igual a zero.');
       return;
@@ -135,7 +137,7 @@ export function AttendanceProceduresSection({
       }
       setShowAddDialog(false);
       setSelectedCatalogId('');
-      setPracticedValueInput('');
+      setPracticedValueMasked('');
       await onRefresh();
     } catch (err: any) {
       setAddError(err.message || 'Falha ao adicionar procedimento.');
@@ -168,7 +170,7 @@ export function AttendanceProceduresSection({
   const handleUpdateValue = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProcedureId) return;
-    const val = parseFloat(editValueInput);
+    const val = unmaskCurrencyBRL(editValueMasked);
     if (isNaN(val) || val < 0) {
       setEditError('Informe um valor praticado válido maior ou igual a zero.');
       return;
@@ -219,7 +221,7 @@ export function AttendanceProceduresSection({
   // Set Explicit Discount (D2)
   const handleSetDiscount = async (e: React.FormEvent) => {
     e.preventDefault();
-    const discountVal = parseFloat(discountInput);
+    const discountVal = unmaskCurrencyBRL(discountMasked);
     if (isNaN(discountVal) || discountVal < 0) {
       setDiscountError('O valor do desconto deve ser maior ou igual a zero.');
       return;
@@ -270,7 +272,7 @@ export function AttendanceProceduresSection({
               variant="outline"
               size="sm"
               onClick={() => {
-                setDiscountInput(currentDiscount.toString());
+                setDiscountMasked(formatNumberToBRLInput(currentDiscount));
                 setShowDiscountDialog(true);
               }}
               disabled={loading}
@@ -330,7 +332,7 @@ export function AttendanceProceduresSection({
                             className="h-8 w-8"
                             onClick={() => {
                               setEditingProcedureId(p.id);
-                              setEditValueInput(Number(p.practicedValue || 0).toFixed(2));
+                              setEditValueMasked(formatNumberToBRLInput(Number(p.practicedValue || 0)));
                               setShowEditDialog(true);
                             }}
                             title="Editar valor praticado"
@@ -374,29 +376,28 @@ export function AttendanceProceduresSection({
           <form onSubmit={handleAddProcedure} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="proc-select">Procedimento *</Label>
-              <Select value={selectedCatalogId} onValueChange={handleSelectCatalogItem}>
-                <SelectTrigger id="proc-select">
-                  <SelectValue placeholder="Selecione um procedimento..." />
-                </SelectTrigger>
-                <SelectContent className="max-h-56">
-                  {catalog.map((proc) => (
-                    <SelectItem key={proc.id} value={proc.id}>
-                      {proc.nome} — {formatCurrency(Number(proc.precoPadrao || 0))}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <AppCombobox
+                id="proc-select"
+                options={catalog.map((proc) => ({
+                  value: proc.id,
+                  label: `${proc.nome} — ${formatCurrency(getProcPrice(proc))}`,
+                }))}
+                value={selectedCatalogId}
+                onChange={handleSelectCatalogItem}
+                placeholder="Selecione um procedimento..."
+                searchable
+              />
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="practiced-val">Valor Praticado (R$) *</Label>
               <Input
                 id="practiced-val"
-                type="number"
-                step="0.01"
-                min="0"
-                value={practicedValueInput}
-                onChange={(e) => setPracticedValueInput(e.target.value)}
+                type="text"
+                inputMode="numeric"
+                placeholder="R$ 0,00"
+                value={practicedValueMasked}
+                onChange={(e) => setPracticedValueMasked(maskCurrencyBRL(e.target.value))}
                 required
               />
             </div>
@@ -430,11 +431,11 @@ export function AttendanceProceduresSection({
               <Label htmlFor="edit-val">Novo Valor Praticado (R$) *</Label>
               <Input
                 id="edit-val"
-                type="number"
-                step="0.01"
-                min="0"
-                value={editValueInput}
-                onChange={(e) => setEditValueInput(e.target.value)}
+                type="text"
+                inputMode="numeric"
+                placeholder="R$ 0,00"
+                value={editValueMasked}
+                onChange={(e) => setEditValueMasked(maskCurrencyBRL(e.target.value))}
                 required
               />
             </div>
@@ -472,11 +473,11 @@ export function AttendanceProceduresSection({
               <Label htmlFor="disc-val">Valor do Desconto (R$) *</Label>
               <Input
                 id="disc-val"
-                type="number"
-                step="0.01"
-                min="0"
-                value={discountInput}
-                onChange={(e) => setDiscountInput(e.target.value)}
+                type="text"
+                inputMode="numeric"
+                placeholder="R$ 0,00"
+                value={discountMasked}
+                onChange={(e) => setDiscountMasked(maskCurrencyBRL(e.target.value))}
                 required
               />
             </div>

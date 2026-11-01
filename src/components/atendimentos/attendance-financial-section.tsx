@@ -15,13 +15,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { AppCombobox } from '@/components/ui/app-combobox';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  maskCurrencyBRL,
+  formatNumberToBRLInput,
+  unmaskCurrencyBRL,
+  maskDateBR,
+  dateBRToISO,
+  isoToDateBR,
+} from '@/lib/masks';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   DollarSign,
@@ -92,20 +94,20 @@ export function AttendanceFinancialSection({
 
   // Form direct payment
   const [metodo, setMetodo] = useState<'Dinheiro' | 'CartaoDebito' | 'CartaoCredito' | 'Pix' | 'Transferencia' | 'Outro'>('Pix');
-  const [valorDirect, setValorDirect] = useState(
-    financials.outstandingBalance > 0 ? financials.outstandingBalance.toFixed(2) : '0.00'
+  const [valorDirectMasked, setValorDirectMasked] = useState(
+    formatNumberToBRLInput(financials.outstandingBalance > 0 ? financials.outstandingBalance : 0)
   );
   const [numeroParcelasCard, setNumeroParcelasCard] = useState('1');
   const [identificadorTransacao, setIdentificadorTransacao] = useState('');
   const [observacoesDirect, setObservacoesDirect] = useState('');
 
   // Form PIX schedule
-  const [valorTotalPix, setValorTotalPix] = useState(
-    financials.outstandingBalance > 0 ? financials.outstandingBalance.toFixed(2) : '0.00'
+  const [valorTotalPixMasked, setValorTotalPixMasked] = useState(
+    formatNumberToBRLInput(financials.outstandingBalance > 0 ? financials.outstandingBalance : 0)
   );
   const [numeroParcelasPix, setNumeroParcelasPix] = useState('2');
-  const [primeiroVencimento, setPrimeiroVencimento] = useState(
-    new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]
+  const [primeiroVencimentoMasked, setPrimeiroVencimentoMasked] = useState(
+    isoToDateBR(new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0])
   );
   const [intervaloDias, setIntervaloDias] = useState('30');
   const [observacoesPix, setObservacoesPix] = useState('');
@@ -113,9 +115,14 @@ export function AttendanceFinancialSection({
   const isEditable = status !== 'Cancelado';
 
   const openPaymentDialog = () => {
-    const bal = financials.outstandingBalance > 0 ? financials.outstandingBalance.toFixed(2) : '0.00';
-    setValorDirect(bal);
-    setValorTotalPix(bal);
+    const balMasked = formatNumberToBRLInput(
+      financials.outstandingBalance > 0 ? financials.outstandingBalance : 0
+    );
+    setValorDirectMasked(balMasked);
+    setValorTotalPixMasked(balMasked);
+    setPrimeiroVencimentoMasked(
+      isoToDateBR(new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0])
+    );
     setError(null);
     setShowPaymentModal(true);
   };
@@ -123,7 +130,7 @@ export function AttendanceFinancialSection({
   // Submit direct payment
   const handleRecordDirectPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    const val = parseFloat(valorDirect);
+    const val = unmaskCurrencyBRL(valorDirectMasked);
     if (isNaN(val) || val <= 0) {
       setError('O valor do pagamento deve ser maior que zero.');
       return;
@@ -164,7 +171,7 @@ export function AttendanceFinancialSection({
   // Submit PIX schedule
   const handleRecordPixSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
-    const totalVal = parseFloat(valorTotalPix);
+    const totalVal = unmaskCurrencyBRL(valorTotalPixMasked);
     if (isNaN(totalVal) || totalVal <= 0) {
       setError('O valor total do parcelamento deve ser maior que zero.');
       return;
@@ -174,8 +181,9 @@ export function AttendanceFinancialSection({
       setError('O número de parcelas deve ser entre 1 e 24.');
       return;
     }
-    if (!primeiroVencimento) {
-      setError('Informe a data do primeiro vencimento.');
+    const isoPrimeiroVenc = dateBRToISO(primeiroVencimentoMasked);
+    if (!isoPrimeiroVenc) {
+      setError('Informe a data do primeiro vencimento no formato DD/MM/AAAA.');
       return;
     }
 
@@ -186,7 +194,7 @@ export function AttendanceFinancialSection({
       const payload = {
         valorTotal: totalVal,
         numeroParcelas: parcels,
-        primeiroVencimento: new Date(primeiroVencimento).toISOString(),
+        primeiroVencimento: new Date(`${isoPrimeiroVenc}T12:00:00Z`).toISOString(),
         intervaloDias: parseInt(intervaloDias, 10) || 30,
         observacoes: observacoesPix.trim() || null,
       };
@@ -481,30 +489,31 @@ export function AttendanceFinancialSection({
               <form onSubmit={handleRecordDirectPayment} className="space-y-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="metodo-select">Método de Pagamento *</Label>
-                  <Select value={metodo} onValueChange={(v) => setMetodo(v as any)}>
-                    <SelectTrigger id="metodo-select">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Pix">PIX à Vista</SelectItem>
-                      <SelectItem value="Dinheiro">Dinheiro</SelectItem>
-                      <SelectItem value="CartaoDebito">Cartão de Débito</SelectItem>
-                      <SelectItem value="CartaoCredito">Cartão de Crédito</SelectItem>
-                      <SelectItem value="Transferencia">Transferência Bancária</SelectItem>
-                      <SelectItem value="Outro">Outro</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <AppCombobox
+                    id="metodo-select"
+                    options={[
+                      { value: 'Pix', label: 'PIX à Vista' },
+                      { value: 'Dinheiro', label: 'Dinheiro' },
+                      { value: 'CartaoDebito', label: 'Cartão de Débito' },
+                      { value: 'CartaoCredito', label: 'Cartão de Crédito' },
+                      { value: 'Transferencia', label: 'Transferência Bancária' },
+                      { value: 'Outro', label: 'Outro' },
+                    ]}
+                    value={metodo}
+                    onChange={(v) => setMetodo(v as any)}
+                    searchable={false}
+                  />
                 </div>
 
                 <div className="space-y-1.5">
                   <Label htmlFor="valor-direct">Valor (R$) *</Label>
                   <Input
                     id="valor-direct"
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    value={valorDirect}
-                    onChange={(e) => setValorDirect(e.target.value)}
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="R$ 0,00"
+                    value={valorDirectMasked}
+                    onChange={(e) => setValorDirectMasked(maskCurrencyBRL(e.target.value))}
                     required
                   />
                 </div>
@@ -512,21 +521,18 @@ export function AttendanceFinancialSection({
                 {metodo === 'CartaoCredito' && (
                   <div className="space-y-1.5">
                     <Label htmlFor="num-parcelas">Número de Parcelas no Cartão</Label>
-                    <Select value={numeroParcelasCard} onValueChange={setNumeroParcelasCard}>
-                      <SelectTrigger id="num-parcelas">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
-                          <SelectItem key={n} value={n.toString()}>
-                            {n}x de{' '}
-                            {formatCurrency(
-                              (parseFloat(valorDirect) || 0) / n
-                            )}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <AppCombobox
+                      id="num-parcelas"
+                      options={Array.from({ length: 12 }, (_, i) => i + 1).map((n) => ({
+                        value: n.toString(),
+                        label: `${n}x de ${formatCurrency(
+                          unmaskCurrencyBRL(valorDirectMasked) / n
+                        )}`,
+                      }))}
+                      value={numeroParcelasCard}
+                      onChange={setNumeroParcelasCard}
+                      searchable={false}
+                    />
                   </div>
                 )}
 
@@ -568,11 +574,11 @@ export function AttendanceFinancialSection({
                   <Label htmlFor="pix-total">Valor Total a Parcelar (R$) *</Label>
                   <Input
                     id="pix-total"
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    value={valorTotalPix}
-                    onChange={(e) => setValorTotalPix(e.target.value)}
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="R$ 0,00"
+                    value={valorTotalPixMasked}
+                    onChange={(e) => setValorTotalPixMasked(maskCurrencyBRL(e.target.value))}
                     required
                   />
                 </div>
@@ -580,18 +586,16 @@ export function AttendanceFinancialSection({
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="pix-parcelas">Número de Parcelas *</Label>
-                    <Select value={numeroParcelasPix} onValueChange={setNumeroParcelasPix}>
-                      <SelectTrigger id="pix-parcelas">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: 24 }, (_, i) => i + 1).map((n) => (
-                          <SelectItem key={n} value={n.toString()}>
-                            {n}x parcelas
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <AppCombobox
+                      id="pix-parcelas"
+                      options={Array.from({ length: 24 }, (_, i) => i + 1).map((n) => ({
+                        value: n.toString(),
+                        label: `${n}x parcelas`,
+                      }))}
+                      value={numeroParcelasPix}
+                      onChange={setNumeroParcelasPix}
+                      searchable={false}
+                    />
                   </div>
 
                   <div className="space-y-1.5">
@@ -609,12 +613,14 @@ export function AttendanceFinancialSection({
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="pix-primeiro-venc">Primeiro Vencimento *</Label>
+                  <Label htmlFor="pix-primeiro-venc">Primeiro Vencimento (DD/MM/AAAA) *</Label>
                   <Input
                     id="pix-primeiro-venc"
-                    type="date"
-                    value={primeiroVencimento}
-                    onChange={(e) => setPrimeiroVencimento(e.target.value)}
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="DD/MM/AAAA"
+                    value={primeiroVencimentoMasked}
+                    onChange={(e) => setPrimeiroVencimentoMasked(maskDateBR(e.target.value))}
                     required
                   />
                 </div>

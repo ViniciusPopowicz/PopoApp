@@ -16,13 +16,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { AppCombobox } from '@/components/ui/app-combobox';
 import {
   Boxes,
   Plus,
@@ -420,45 +414,37 @@ export function AttendanceProductUsagesSection({
             {mode === 'UNIT' ? (
               <div className="space-y-1.5">
                 <Label htmlFor="unit-select">Unidade de Estoque Disponível *</Label>
-                <Select value={selectedUnitId} onValueChange={setSelectedUnitId}>
-                  <SelectTrigger id="unit-select">
-                    <SelectValue placeholder="Selecione por código serial..." />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-56">
-                    {availableUnits.length === 0 ? (
-                      <div className="p-2 text-xs text-muted-foreground text-center">
-                        Nenhuma unidade disponível em estoque para este cliente.
-                      </div>
-                    ) : (
-                      availableUnits.map((unit) => {
-                        const prodName = unit.productName || unit.lot?.product?.nome || 'Produto';
-                        const isReusable = unit.isReusable ?? unit.lot?.product?.isReusable;
-                        return (
-                          <SelectItem key={unit.id} value={unit.id}>
-                            {unit.codigoSerial} — {prodName} {isReusable ? '(Reutilizável)' : ''}
-                          </SelectItem>
-                        );
-                      })
-                    )}
-                  </SelectContent>
-                </Select>
+                <AppCombobox
+                  id="unit-select"
+                  options={availableUnits.map((unit) => {
+                    const prodName = unit.productName || unit.lot?.product?.nome || 'Produto';
+                    const isReusable = unit.isReusable ?? unit.lot?.product?.isReusable;
+                    return {
+                      value: unit.id,
+                      label: `${unit.codigoSerial} — ${prodName} ${isReusable ? '(Reutilizável)' : ''}`,
+                    };
+                  })}
+                  value={selectedUnitId}
+                  onChange={setSelectedUnitId}
+                  placeholder="Selecione por código serial..."
+                  emptyText="Nenhuma unidade disponível em estoque para este cliente."
+                  searchable
+                />
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-2 space-y-1.5">
                   <Label>Produto Consumível *</Label>
-                  <Select value={selectedProductId} onValueChange={setSelectedProductId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o produto..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {quantityProducts.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.nome} (Saldo: {p.totalQuantityAvailable} {p.unidade})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <AppCombobox
+                    options={quantityProducts.map((p) => ({
+                      value: p.id,
+                      label: `${p.nome} (Saldo: ${p.totalQuantityAvailable} ${p.unidade})`,
+                    }))}
+                    value={selectedProductId}
+                    onChange={setSelectedProductId}
+                    placeholder="Selecione o produto..."
+                    searchable
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Quantidade *</Label>
@@ -476,22 +462,20 @@ export function AttendanceProductUsagesSection({
 
             <div className="space-y-1.5">
               <Label htmlFor="proc-assoc-select">Procedimento Vinculado (Opcional)</Label>
-              <Select
+              <AppCombobox
+                id="proc-assoc-select"
+                options={[
+                  { value: 'none', label: 'Nenhum (Uso geral na sessão)' },
+                  ...procedures.map((proc) => ({
+                    value: proc.id,
+                    label: proc.procedure.nome,
+                  })),
+                ]}
                 value={selectedAttendanceProcId}
-                onValueChange={setSelectedAttendanceProcId}
-              >
-                <SelectTrigger id="proc-assoc-select">
-                  <SelectValue placeholder="Vincular a um procedimento..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhum (Uso geral na sessão)</SelectItem>
-                  {procedures.map((proc) => (
-                    <SelectItem key={proc.id} value={proc.id}>
-                      {proc.procedure.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={setSelectedAttendanceProcId}
+                placeholder="Vincular a um procedimento..."
+                searchable={false}
+              />
             </div>
 
             <div className="space-y-1.5">

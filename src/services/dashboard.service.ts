@@ -16,6 +16,8 @@ import {
   BirthdayItemDto,
 } from '@/types/dashboard';
 
+import { ensureDatabaseSchema } from '@/lib/db-bootstrap';
+
 const METHOD_LABELS: Record<string, string> = {
   Dinheiro: 'Dinheiro',
   Pix: 'PIX',
@@ -36,13 +38,19 @@ export class DashboardService {
     customStart?: string,
     customEnd?: string
   ): { startDate: Date; endDate: Date } {
-    const ref = refDateInput ? new Date(refDateInput) : new Date();
+    const parsedRef = refDateInput ? new Date(refDateInput) : new Date();
+    const ref = isNaN(parsedRef.getTime()) ? new Date() : parsedRef;
 
     if (period === 'custom' && customStart && customEnd) {
-      return {
-        startDate: new Date(customStart),
-        endDate: new Date(customEnd),
-      };
+      const s = new Date(customStart);
+      const e = new Date(customEnd);
+      if (!isNaN(s.getTime()) && !isNaN(e.getTime())) {
+        // If customEnd is a date-only string (YYYY-MM-DD), extend to 23:59:59.999
+        if (/^\d{4}-\d{2}-\d{2}$/.test(customEnd.trim())) {
+          e.setUTCHours(23, 59, 59, 999);
+        }
+        return { startDate: s, endDate: e };
+      }
     }
 
     if (period === 'today') {
@@ -108,7 +116,7 @@ export class DashboardService {
     let netRevenue = 0;
 
     for (const att of attendances) {
-      const practicedSum = att.procedures.reduce((acc, p) => acc + Number(p.practicedValue), 0);
+      const practicedSum = (att.procedures || []).reduce((acc, p) => acc + Number(p.practicedValue), 0);
       const discount = Number(att.desconto ?? 0);
       const net = Math.max(0, practicedSum - discount);
 
@@ -142,7 +150,7 @@ export class DashboardService {
     // 3. Outstanding revenue for attendances executed in this period
     let paidForTheseAttendances = 0;
     for (const att of attendances) {
-      for (const p of att.payments) {
+      for (const p of att.payments || []) {
         if (p.pixInstallments && p.pixInstallments.length > 0) {
           paidForTheseAttendances += p.pixInstallments
             .filter((i) => i.status === 'Pago')
@@ -247,12 +255,12 @@ export class DashboardService {
     const debtorsList: AccountsReceivableSummaryDto['topDebtors'] = [];
 
     for (const att of activeAttendances) {
-      const practicedTotal = att.procedures.reduce((acc, p) => acc + Number(p.practicedValue), 0);
+      const practicedTotal = (att.procedures || []).reduce((acc, p) => acc + Number(p.practicedValue), 0);
       const explicitDiscount = Number(att.desconto ?? 0);
       const netTotal = Math.max(0, practicedTotal - explicitDiscount);
 
       let paidTotal = 0;
-      for (const p of att.payments) {
+      for (const p of att.payments || []) {
         if (p.pixInstallments && p.pixInstallments.length > 0) {
           paidTotal += p.pixInstallments
             .filter((i) => i.status === 'Pago')
@@ -270,10 +278,10 @@ export class DashboardService {
         debtorsList.push({
           attendanceId: att.id,
           clientId: att.clientId,
-          clientName: att.client.nome,
-          clientPhone: att.client.telefone,
-          clientCpf: att.client.cpf,
-          attendanceDate: att.dataHora.toISOString(),
+          clientName: att.client?.nome || 'Cliente',
+          clientPhone: att.client?.telefone || null,
+          clientCpf: att.client?.cpf || '',
+          attendanceDate: (att.dataHora instanceof Date ? att.dataHora : new Date(att.dataHora)).toISOString(),
           netTotal,
           paidTotal,
           outstandingBalance,
@@ -361,12 +369,12 @@ export class DashboardService {
     const upcomingList = upcomingRaw.map((a) => ({
       id: a.id,
       clientId: a.clientId,
-      clientName: a.client.nome,
-      clientPhotoUrl: a.client.profilePhotoId ? `/api/attachments/${a.client.profilePhotoId}` : null,
-      dataHora: a.dataHora.toISOString(),
+      clientName: a.client?.nome || 'Cliente não identificado',
+      clientPhotoUrl: a.client?.profilePhotoId ? `/api/attachments/${a.client.profilePhotoId}` : null,
+      dataHora: (a.dataHora instanceof Date ? a.dataHora : new Date(a.dataHora)).toISOString(),
       status: a.status,
-      duracaoMinutos: a.plannedProcedures.reduce((sum, p) => sum + (p.procedure?.duracaoMinutos || 0), 0),
-      procedimentosPlanejados: a.plannedProcedures.map((p) => p.procedure.nome),
+      duracaoMinutos: (a.plannedProcedures || []).reduce((sum, p) => sum + (p.procedure?.duracaoMinutos || 0), 0),
+      procedimentosPlanejados: (a.plannedProcedures || []).map((p) => p.procedure?.nome || 'Procedimento').filter(Boolean),
     }));
 
     return {
@@ -410,42 +418,80 @@ export class DashboardService {
   }
 
   /**
-   * Computes low stock alerts for active products with <= 5 available units.
+   * Computes low stock alerts for active products with <= threshold available units.
    */
-  static async getLowStockAlerts(now: Date): Promise<LowStockAlertDto[]> {
-    const products = await prisma.product.findMany({
-      where: { isActive: true },
-      select: {
-        id: true,
-        nome: true,
-        marca: true,
-        categoria: true,
-        unidade: true,
-        isReusable: true,
-        lots: {
-          select: {
-            dataValidade: true,
-            stockUnits: {
-              where: { status: 'Disponivel' },
-              select: { id: true },
+  static async getLowStockAlerts(now: Date, lowStockThreshold = 5): Promise<LowStockAlertDto[]> {
+    let products: any[] = [];
+    try {
+      products = await prisma.product.findMany({
+        where: { isActive: true },
+        select: {
+          id: true,
+          nome: true,
+          marca: true,
+          categoria: true,
+          unidade: true,
+          trackingMode: true,
+          estoqueMinimo: true,
+          isReusable: true,
+          lots: {
+            select: {
+              dataValidade: true,
+              quantidadeInicial: true,
+              quantidadeDisponivel: true,
+              stockUnits: {
+                where: { status: 'Disponivel' },
+                select: { id: true },
+              },
             },
           },
         },
-      },
-    });
+      });
+    } catch {
+      products = await prisma.product.findMany({
+        where: { isActive: true },
+        select: {
+          id: true,
+          nome: true,
+          marca: true,
+          categoria: true,
+          unidade: true,
+          isReusable: true,
+          lots: {
+            select: {
+              dataValidade: true,
+              stockUnits: {
+                where: { status: 'Disponivel' },
+                select: { id: true },
+              },
+            },
+          },
+        },
+      });
+    }
 
     const alerts: LowStockAlertDto[] = [];
 
     for (const prod of products) {
       let availableUnits = 0;
-      for (const lot of prod.lots) {
-        // Exclude expired lots
-        if (!lot.dataValidade || lot.dataValidade > now) {
-          availableUnits += lot.stockUnits.length;
+      let totalQty = 0;
+      for (const lot of prod.lots || []) {
+        const expDate = lot.dataValidade ? new Date(lot.dataValidade) : null;
+        if (!expDate || isNaN(expDate.getTime()) || expDate > now) {
+          const lotAvail =
+            lot.quantidadeDisponivel != null
+              ? Number(lot.quantidadeDisponivel)
+              : Number(lot.quantidadeInicial ?? lot.quantidadeOriginal ?? 0);
+          totalQty += lotAvail;
+          availableUnits += Array.isArray(lot.stockUnits) ? lot.stockUnits.length : 0;
         }
       }
 
-      if (availableUnits <= 5) {
+      const effectiveUnits =
+        prod.trackingMode === 'QUANTITY' ? Number(totalQty.toFixed(4)) : availableUnits;
+      const threshold = Number(prod.estoqueMinimo ?? lowStockThreshold) || lowStockThreshold;
+
+      if (effectiveUnits <= threshold) {
         alerts.push({
           productId: prod.id,
           productName: prod.nome,
@@ -453,8 +499,9 @@ export class DashboardService {
           categoria: prod.categoria,
           unidade: prod.unidade,
           isReusable: prod.isReusable,
-          availableUnits,
-          alertLevel: availableUnits === 0 ? 'CRITICO' : 'BAIXO',
+          availableUnits: effectiveUnits,
+          alertLevel: effectiveUnits <= 0 ? 'CRITICO' : 'BAIXO',
+          estoqueMinimo: threshold,
         });
       }
     }
@@ -481,8 +528,9 @@ export class DashboardService {
     let upcomingCount = 0;
 
     const items = pendingReminders.map((r) => {
-      const isOverdue = r.dataVencimento < todayStart;
-      const isToday = r.dataVencimento >= todayStart && r.dataVencimento <= todayEnd;
+      const due = r.dataVencimento instanceof Date ? r.dataVencimento : new Date(r.dataVencimento);
+      const isOverdue = due < todayStart;
+      const isToday = due >= todayStart && due <= todayEnd;
 
       if (isOverdue) overdueCount++;
       else if (isToday) todayCount++;
@@ -492,7 +540,7 @@ export class DashboardService {
         id: r.id,
         titulo: r.titulo,
         descricao: r.descricao,
-        dataVencimento: r.dataVencimento.toISOString(),
+        dataVencimento: isNaN(due.getTime()) ? new Date().toISOString() : due.toISOString(),
         prioridade: r.prioridade,
         status: r.status,
         tipo: r.tipo,
@@ -533,29 +581,36 @@ export class DashboardService {
     });
 
     const currentYear = now.getFullYear();
+    const todayStart = new Date(currentYear, now.getMonth(), now.getDate(), 0, 0, 0, 0);
     const results: BirthdayItemDto[] = [];
 
     for (const client of clients) {
       if (!client.dataNascimento) continue;
       const bday = new Date(client.dataNascimento);
-      const bdayThisYear = new Date(currentYear, bday.getMonth(), bday.getDate());
+      if (isNaN(bday.getTime())) continue;
+
+      const bdayMonth = bday.getUTCMonth();
+      const bdayDate = bday.getUTCDate();
+      let bdayThisYear = new Date(currentYear, bdayMonth, bdayDate, 0, 0, 0, 0);
 
       // If already passed this year, look at next year
-      if (bdayThisYear < now) {
-        bdayThisYear.setFullYear(currentYear + 1);
+      if (bdayThisYear < todayStart) {
+        bdayThisYear = new Date(currentYear + 1, bdayMonth, bdayDate, 0, 0, 0, 0);
       }
 
-      const diffTime = bdayThisYear.getTime() - now.getTime();
-      const diasFaltando = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      const diffTime = bdayThisYear.getTime() - todayStart.getTime();
+      const diasFaltando = Math.max(0, Math.round(diffTime / (1000 * 60 * 60 * 24)));
 
       if (diasFaltando <= 30) {
         results.push({
           id: client.id,
           nome: client.nome,
-          dataNascimento: client.dataNascimento.toISOString(),
-          dataAniversario: `${String(bday.getDate()).padStart(2, '0')}/${String(bday.getMonth() + 1).padStart(2, '0')}`,
+          dataNascimento: bday.toISOString(),
+          dataAniversario: `${String(bdayDate).padStart(2, '0')}/${String(bdayMonth + 1).padStart(2, '0')}`,
           diasFaltando,
           telefone: client.telefone,
+          proximoAniversario: bdayThisYear.toISOString(),
+          diasRestantes: diasFaltando,
         });
       }
     }
@@ -567,8 +622,10 @@ export class DashboardService {
    * Master aggregator for executive dashboard payload.
    */
   static async getDashboardSummary(input?: DashboardQueryInput): Promise<DashboardSummaryResponseDto> {
+    await ensureDatabaseSchema();
     const period = input?.period ?? 'month';
-    const refDate = input?.refDate ? new Date(input.refDate) : new Date();
+    const parsedRef = input?.refDate ? new Date(input.refDate) : new Date();
+    const refDate = isNaN(parsedRef.getTime()) ? new Date() : parsedRef;
     const { startDate, endDate } = this.getDateRange(period, refDate, input?.startDate, input?.endDate);
 
     const now = new Date();
@@ -585,6 +642,7 @@ export class DashboardService {
       accountsReceivable,
       appointments,
       attendances,
+      monthlyAttendances,
       lowStock,
       reminders,
       birthdays,
@@ -597,10 +655,17 @@ export class DashboardService {
       this.getAccountsReceivableSummary(),
       this.getAppointmentsMetrics(todayRange.startDate, todayRange.endDate, now),
       this.getAttendancesMetrics(todayRange.startDate, todayRange.endDate),
-      this.getLowStockAlerts(now),
+      this.getAttendancesMetrics(monthRange.startDate, monthRange.endDate),
+      this.getLowStockAlerts(now, (input as any)?.lowStockThreshold ?? 5),
       this.getRemindersWidget(todayRange.startDate, todayRange.endDate),
       this.getBirthdays(now),
     ]);
+
+    const monthlyAttendancesCount = monthlyAttendances.realizadosCount || attendances.realizadosCount || 0;
+    const monthlyRevenue = monthlyFinancial.receivedRevenue;
+    const averageTicket = monthlyAttendancesCount > 0
+      ? Number((monthlyRevenue / monthlyAttendancesCount).toFixed(2))
+      : 0;
 
     return {
       period: {
@@ -612,18 +677,77 @@ export class DashboardService {
         currentPeriod: currentPeriodFinancial,
         daily: dailyFinancial,
         weekly: weeklyFinancial,
-        monthly: monthlyFinancial,
+        monthly: {
+          ...monthlyFinancial,
+          averageTicket,
+          totalRevenue: monthlyRevenue,
+        },
         cashFlowByMethod,
         accountsReceivable,
       },
       operations: {
-        appointments,
-        attendances,
+        appointments: {
+          ...appointments,
+          nextAppointments: appointments.upcomingList.map((a) => ({
+            id: a.id,
+            dataHora: a.dataHora,
+            status: a.status,
+            client: { id: a.clientId, nome: a.clientName },
+            plannedProcedures: a.procedimentosPlanejados.map((nome) => ({ procedure: { nome } })),
+          })),
+        },
+        attendances: {
+          ...attendances,
+          completedCount: monthlyAttendancesCount,
+          pendingCount: monthlyAttendances.pendentesCount,
+        },
       },
       alerts: {
-        lowStock,
-        reminders,
-        birthdays,
+        lowStock: Object.assign(lowStock, {
+          totalAlerts: lowStock.length,
+          items: lowStock.map((item) => ({
+            id: item.productId,
+            nome: item.productName,
+            estoqueAtual: item.availableUnits,
+            estoqueMinimo: item.estoqueMinimo ?? 5,
+            unidade: item.unidade,
+            isCritical: item.alertLevel === 'CRITICO',
+          })),
+        }),
+        reminders: {
+          ...reminders,
+          totalPending: reminders.summary.totalPending,
+          totalOverdue: reminders.summary.overdueCount,
+          overdueItems: reminders.items
+            .filter((i) => i.isOverdue)
+            .map((i) => ({
+              id: i.id,
+              titulo: i.titulo,
+              dataVencimento: i.dataVencimento,
+              prioridade: i.prioridade,
+              client: i.clientName ? { nome: i.clientName } : null,
+              pixInstallment: i.installmentValor ? { valor: i.installmentValor } : null,
+            })),
+          upcomingItems: reminders.items
+            .filter((i) => !i.isOverdue)
+            .map((i) => ({
+              id: i.id,
+              titulo: i.titulo,
+              dataVencimento: i.dataVencimento,
+              prioridade: i.prioridade,
+              client: i.clientName ? { nome: i.clientName } : null,
+              pixInstallment: i.installmentValor ? { valor: i.installmentValor } : null,
+            })),
+        },
+        birthdays: Object.assign(birthdays, {
+          count: birthdays.length,
+          items: birthdays.map((b) => ({
+            id: b.id,
+            nome: b.nome,
+            diasRestantes: b.diasFaltando,
+            proximoAniversario: b.proximoAniversario || b.dataNascimento,
+          })),
+        }),
       },
       legacyCompat: {
         receitasMes: monthlyFinancial.receivedRevenue,

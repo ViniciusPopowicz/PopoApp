@@ -83,6 +83,11 @@ export interface StockUnitSummaryDto {
   createdAt: string;
 }
 
+export interface StockUnitItemDto extends StockUnitSummaryDto {
+  productMarca?: string | null;
+  usagesCount?: number;
+}
+
 export interface StockUnitDetailDto extends StockUnitSummaryDto {
   usages: ProductUsageSummaryDto[];
 }

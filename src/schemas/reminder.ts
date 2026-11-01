@@ -117,6 +117,8 @@ export const updateReminderRecurrenceSchema = z.object({
 });
 
 export const reminderQuerySchema = z.object({
+  search: z.string().trim().optional(),
+  date: z.string().trim().optional(),
   status: z.enum(['pendente', 'concluido', 'dispensado', 'todos', 'atrasado']).optional(),
   prioridade: reminderPrioritySchema.optional(),
   tipo: z.string().optional(),
@@ -129,7 +131,7 @@ export const reminderQuerySchema = z.object({
   endDate: z.string().optional(),
   overdueOnly: z.preprocess((val) => val === 'true' || val === true, z.boolean().optional()),
   upcomingDays: z.coerce.number().int().min(1).max(365).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
+  limit: z.coerce.number().int().min(1).max(500).default(50),
   offset: z.coerce.number().int().min(0).default(0),
 });
 

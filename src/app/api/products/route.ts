@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     const rawQuery = {
       search: searchParams.get('search') ?? searchParams.get('q') ?? undefined,
       categoria: searchParams.get('categoria') ?? undefined,
+      trackingMode: searchParams.get('trackingMode') ?? undefined,
       isReusable: searchParams.get('isReusable') ?? searchParams.get('reutilizavel') ?? undefined,
       active: searchParams.get('active') ?? searchParams.get('ativo') ?? undefined,
     };
@@ -24,11 +25,12 @@ export async function GET(request: NextRequest) {
     }
 
     const products = await listProducts(parsedQuery.data);
-    return NextResponse.json({ success: true, data: products });
+    return NextResponse.json({ success: true, data: products, items: products });
   } catch (error: any) {
     if (error instanceof DomainError) {
       return NextResponse.json({ success: false, error: error.message }, { status: error.statusCode });
     }
+    console.error('Error in GET /api/products:', error);
     return NextResponse.json({ success: false, error: 'Erro interno ao consultar produtos' }, { status: 500 });
   }
 }

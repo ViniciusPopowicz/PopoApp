@@ -10,6 +10,7 @@ export interface ProcedureResponseDto {
   nome: string;
   descricao: string;
   valorPadrao: number; // Converted from Decimal for JSON/UI consumers
+  precoPadrao?: number; // Alias for Appointment/UI consumers
   duracaoMinutos: number;
   categoria: string;
   isActive: boolean;

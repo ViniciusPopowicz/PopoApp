@@ -1,12 +1,51 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  startOfWeek,
+  endOfWeek,
+  eachDayOfInterval,
+  isSameMonth,
+  isSameDay,
+  isToday,
+  addMonths,
+  subMonths,
+  addWeeks,
+  subWeeks,
+  addDays,
+  subDays,
+  parseISO,
+} from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Clock,
+  User,
+  CheckCircle,
+  XCircle,
+  UserX,
+  CalendarClock,
+  ExternalLink,
+  AlertCircle,
+  RefreshCw,
+  Bell,
+} from 'lucide-react';
+
 import { PageHeader } from '@/components/shared/page-header';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -15,68 +54,30 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { AppCombobox } from '@/components/ui/app-combobox';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Plus,
-  ChevronLeft,
-  ChevronRight,
-  Calendar as CalendarIcon,
-  Clock,
-  User,
-  CheckCircle,
-  XCircle,
-  UserX,
-  CalendarClock,
-  ExternalLink,
-  RefreshCw,
-  List,
-  AlertCircle,
-} from 'lucide-react';
-import {
-  format,
-  startOfMonth,
-  endOfMonth,
-  startOfWeek,
-  endOfWeek,
-  eachDayOfInterval,
-  addDays,
-  addWeeks,
-  addMonths,
-  subDays,
-  subWeeks,
-  subMonths,
-  isSameDay,
-  isSameMonth,
-  isToday,
-  parseISO,
-} from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { formatCurrency, formatDate, formatDateTime, formatTime } from '@/lib/format';
+  maskCurrencyBRL,
+  formatNumberToBRLInput,
+  unmaskCurrencyBRL,
+  maskDateBR,
+  dateBRToISO,
+  isoToDateBR,
+} from '@/lib/masks';
+import { formatCurrency, formatDateTime, formatTime } from '@/lib/format';
 
-type ViewMode = 'dia' | 'semana' | 'mes' | 'lista';
+// Types
+interface ClientOption {
+  id: string;
+  nome: string;
+  telefone?: string;
+}
 
 interface ProcedureOption {
   id: string;
   nome: string;
-  precoPadrao: number;
-  duracaoMinutos: number;
-  categoria?: string | null;
-}
-
-interface ClientOption {
-  id: string;
-  nome: string;
-  telefone?: string | null;
-  cpf?: string | null;
+  valorPadrao?: number;
+  precoPadrao?: number;
+  duracaoMinutos?: number;
 }
 
 interface AppointmentItem {
@@ -84,13 +85,14 @@ interface AppointmentItem {
   clientId: string;
   dataHora: string;
   status: string;
-  valorEstimado?: number | null;
   observacoes?: string | null;
+  valorEstimado?: number | null;
+  motivoCancelamento?: string | null;
   client: {
     id: string;
     nome: string;
-    telefone?: string | null;
-    cpf?: string | null;
+    cpf?: string;
+    telefone?: string;
   };
   plannedProcedures?: Array<{
     id: string;
@@ -98,163 +100,218 @@ interface AppointmentItem {
     procedure: {
       id: string;
       nome: string;
-      duracaoMinutos?: number | null;
-      precoPadrao?: number | null;
+      duracaoMinutos?: number;
     };
   }>;
   attendance?: {
     id: string;
     status: string;
-    completedAt?: string | null;
   } | null;
   attendances?: Array<{
     id: string;
     status: string;
-    completedAt?: string | null;
   }>;
 }
 
+interface CalendarReminderItem {
+  id: string;
+  titulo: string;
+  dataVencimento: string;
+  prioridade: string;
+  status: string;
+}
+
+type ViewMode = 'mes' | 'semana' | 'dia' | 'lista';
+
+const getProcedurePrice = (proc?: ProcedureOption | null): number => {
+  if (!proc) return 0;
+  const val = proc.valorPadrao ?? proc.precoPadrao ?? 0;
+  const num = Number(val);
+  return isNaN(num) ? 0 : num;
+};
+
 export default function AgendaPage() {
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const router = useRouter();
   const [view, setView] = useState<ViewMode>('mes');
+  const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
+  const [reminders, setReminders] = useState<CalendarReminderItem[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [procedures, setProcedures] = useState<ProcedureOption[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Selected appointment for detail modal
+  // Dialog states
+  const [showNewDialog, setShowNewDialog] = useState<boolean>(false);
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentItem | null>(null);
-  const [showDetailDialog, setShowDetailDialog] = useState(false);
+  const [showDetailDialog, setShowDetailDialog] = useState<boolean>(false);
 
-  // Create appointment modal state
-  const [showNewDialog, setShowNewDialog] = useState(false);
-  const [newClientId, setNewClientId] = useState('');
-  const [newDate, setNewDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [newTime, setNewTime] = useState('09:00');
+  // Action sub-dialogs
+  const [showCancelDialog, setShowCancelDialog] = useState<boolean>(false);
+  const [showRescheduleDialog, setShowRescheduleDialog] = useState<boolean>(false);
+
+  // Create form states
+  const [newClientId, setNewClientId] = useState<string>('');
+  const [newDateMasked, setNewDateMasked] = useState<string>(
+    isoToDateBR(format(new Date(), 'yyyy-MM-dd'))
+  );
+  const [newTime, setNewTime] = useState<string>('09:00');
   const [newSelectedProcedures, setNewSelectedProcedures] = useState<string[]>([]);
-  const [newValorEstimado, setNewValorEstimado] = useState('');
-  const [newObservacoes, setNewObservacoes] = useState('');
+  const [newValorEstimadoMasked, setNewValorEstimadoMasked] = useState<string>('');
+  const [newObservacoes, setNewObservacoes] = useState<string>('');
   const [newDialogError, setNewDialogError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<boolean>(false);
 
-  // Sub-dialogs for actions
-  const [showCancelDialog, setShowCancelDialog] = useState(false);
-  const [cancelReason, setCancelReason] = useState('');
+  // Cancel form state
+  const [cancelReason, setCancelReason] = useState<string>('');
   const [cancelError, setCancelError] = useState<string | null>(null);
 
-  const [showRescheduleDialog, setShowRescheduleDialog] = useState(false);
-  const [rescheduleDate, setRescheduleDate] = useState('');
-  const [rescheduleTime, setRescheduleTime] = useState('09:00');
-  const [rescheduleReason, setRescheduleReason] = useState('');
+  // Reschedule form state
+  const [rescheduleDateMasked, setRescheduleDateMasked] = useState<string>('');
+  const [rescheduleTime, setRescheduleTime] = useState<string>('09:00');
+  const [rescheduleReason, setRescheduleReason] = useState<string>('');
   const [rescheduleError, setRescheduleError] = useState<string | null>(null);
 
-  // Fetch reference lists (Clients, Procedures)
-  useEffect(() => {
-    const fetchReferences = async () => {
-      try {
-        const [clientsRes, proceduresRes] = await Promise.all([
-          fetch('/api/clients?limit=100&active=true'),
-          fetch('/api/procedures?active=true'),
-        ]);
-
-        if (clientsRes.ok) {
-          const cData = await clientsRes.json();
-          if (cData.success && cData.items) {
-            setClients(cData.items);
-          }
-        }
-
-        if (proceduresRes.ok) {
-          const pData = await proceduresRes.json();
-          if (pData.success && pData.data) {
-            setProcedures(pData.data);
-          }
-        }
-      } catch (err) {
-        console.error('Error fetching reference data for agenda:', err);
-      }
-    };
-
-    fetchReferences();
-  }, []);
-
-  // Compute date range based on view & currentDate
+  // Compute date range for current view
   const dateRange = useMemo(() => {
     if (view === 'mes') {
-      const monthStart = startOfMonth(currentDate);
-      const monthEnd = endOfMonth(currentDate);
-      return {
-        startDate: startOfWeek(monthStart, { weekStartsOn: 0 }),
-        endDate: endOfWeek(monthEnd, { weekStartsOn: 0 }),
-      };
+      const start = startOfWeek(startOfMonth(currentDate), { locale: ptBR });
+      const end = endOfWeek(endOfMonth(currentDate), { locale: ptBR });
+      return { startDate: start, endDate: end };
     }
     if (view === 'semana') {
-      return {
-        startDate: startOfWeek(currentDate, { weekStartsOn: 0 }),
-        endDate: endOfWeek(currentDate, { weekStartsOn: 0 }),
-      };
+      const start = startOfWeek(currentDate, { locale: ptBR });
+      const end = endOfWeek(currentDate, { locale: ptBR });
+      return { startDate: start, endDate: end };
     }
     if (view === 'dia') {
-      const d = new Date(currentDate);
-      d.setHours(0, 0, 0, 0);
-      const e = new Date(currentDate);
-      e.setHours(23, 59, 59, 999);
-      return { startDate: d, endDate: e };
+      const start = new Date(currentDate);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(currentDate);
+      end.setHours(23, 59, 59, 999);
+      return { startDate: start, endDate: end };
     }
-    // Lista: entire month around currentDate
-    return {
-      startDate: subDays(startOfMonth(currentDate), 7),
-      endDate: addDays(endOfMonth(currentDate), 7),
-    };
-  }, [currentDate, view]);
+    // Lista: show current month
+    const start = startOfMonth(currentDate);
+    const end = endOfMonth(currentDate);
+    return { startDate: start, endDate: end };
+  }, [view, currentDate]);
 
-  // Fetch appointments for current range
-  const loadAppointments = async () => {
+  // Fetch appointments & reminders in range
+  const loadAppointments = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const startIso = dateRange.startDate.toISOString();
-      const endIso = dateRange.endDate.toISOString();
-      const res = await fetch(`/api/appointments?startDate=${startIso}&endDate=${endIso}&limit=100`);
+      const params = new URLSearchParams({
+        startDate: dateRange.startDate.toISOString(),
+        endDate: dateRange.endDate.toISOString(),
+        limit: '200',
+      });
+
+      const remParams = new URLSearchParams({
+        startDate: dateRange.startDate.toISOString(),
+        endDate: dateRange.endDate.toISOString(),
+        status: 'pendente',
+        limit: '200',
+      });
+
+      const [res, remRes] = await Promise.all([
+        fetch(`/api/appointments?${params.toString()}`),
+        fetch(`/api/reminders?${remParams.toString()}`),
+      ]);
+
       if (!res.ok) {
-        throw new Error('Falha ao carregar agendamentos');
+        throw new Error('Falha ao carregar agendamentos.');
       }
-      const data = await res.json();
-      if (data.success && data.data) {
-        setAppointments(data.data);
-      } else {
-        throw new Error(data.error || 'Erro ao carregar agendamentos');
+      const json = await res.json();
+      const list = json.data?.items || json.data || json.appointments || [];
+      setAppointments(Array.isArray(list) ? list : []);
+
+      if (remRes.ok) {
+        const remJson = await remRes.json();
+        const remList = remJson.data || remJson.items || [];
+        setReminders(Array.isArray(remList) ? remList : []);
       }
     } catch (err: any) {
       console.error('Error loading appointments:', err);
-      setError(err.message || 'Erro ao buscar agendamentos na agenda');
+      setError(err.message || 'Erro ao carregar agenda.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateRange]);
+
+  // Group reminders by YYYY-MM-DD key for O(1) lookup per day cell
+  const remindersByDayMap = useMemo(() => {
+    const map = new Map<string, CalendarReminderItem[]>();
+    for (const rem of reminders) {
+      if (!rem.dataVencimento) continue;
+      const dt = parseISO(rem.dataVencimento);
+      if (isNaN(dt.getTime())) continue;
+      const key = format(dt, 'yyyy-MM-dd');
+      const existing = map.get(key) || [];
+      existing.push(rem);
+      map.set(key, existing);
+    }
+    return map;
+  }, [reminders]);
+
+  // Fetch clients and procedures for create dialog
+  useEffect(() => {
+    async function loadOptions() {
+      try {
+        const [clientsRes, procsRes] = await Promise.all([
+          fetch('/api/clients?status=ativo&limit=100'),
+          fetch('/api/procedures?active=true&limit=100'),
+        ]);
+        if (clientsRes.ok) {
+          const cJson = await clientsRes.json();
+          const cList = cJson.data?.items || cJson.data || cJson.items || [];
+          setClients(Array.isArray(cList) ? cList : []);
+        }
+        if (procsRes.ok) {
+          const pJson = await procsRes.json();
+          const pList = pJson.data?.items || pJson.data || pJson.items || [];
+          setProcedures(Array.isArray(pList) ? pList : []);
+        }
+      } catch (err) {
+        console.error('Error loading form options:', err);
+      }
+    }
+    loadOptions();
+  }, []);
 
   useEffect(() => {
     loadAppointments();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateRange]);
+  }, [loadAppointments]);
 
-  // Auto-calculate suggested duration & estimated value in create modal
+  const clientComboboxOptions = useMemo(
+    () =>
+      clients.map((c) => ({
+        value: c.id,
+        label: c.nome,
+        sublabel: c.telefone ? `Tel: ${c.telefone}` : undefined,
+      })),
+    [clients]
+  );
+
+  // Auto-calculate suggested estimated value in create modal (BUG-005 fix)
   const handleToggleProcedure = (procId: string) => {
     const updated = newSelectedProcedures.includes(procId)
       ? newSelectedProcedures.filter((id) => id !== procId)
       : [...newSelectedProcedures, procId];
     setNewSelectedProcedures(updated);
 
-    // Sum default prices
+    if (updated.length === 0) {
+      setNewValorEstimadoMasked('');
+      return;
+    }
+
     const totalSuggested = updated.reduce((sum, id) => {
       const p = procedures.find((item) => item.id === id);
-      return sum + (p?.precoPadrao ? Number(p.precoPadrao) : 0);
+      return sum + getProcedurePrice(p);
     }, 0);
 
-    if (totalSuggested > 0) {
-      setNewValorEstimado(totalSuggested.toFixed(2));
-    }
+    setNewValorEstimadoMasked(formatNumberToBRLInput(totalSuggested));
   };
 
   // Navigations
@@ -272,6 +329,12 @@ export default function AgendaPage() {
 
   const handleToday = () => setCurrentDate(new Date());
 
+  const handleNavigateRemindersForDay = (day: Date, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const dateKey = format(day, 'yyyy-MM-dd');
+    router.push(`/lembretes?date=${dateKey}`);
+  };
+
   // Handle Create Appointment
   const handleCreateAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -279,8 +342,10 @@ export default function AgendaPage() {
       setNewDialogError('Selecione um cliente para o agendamento.');
       return;
     }
-    if (!newDate || !newTime) {
-      setNewDialogError('Informe a data e o horário do agendamento.');
+
+    const isoDate = dateBRToISO(newDateMasked);
+    if (!isoDate || !newTime) {
+      setNewDialogError('Informe uma data válida (DD/MM/AAAA) e o horário do agendamento.');
       return;
     }
 
@@ -289,13 +354,17 @@ export default function AgendaPage() {
       setNewDialogError(null);
 
       const [hours, minutes] = newTime.split(':').map(Number);
-      const [year, month, day] = newDate.split('-').map(Number);
+      const [year, month, day] = isoDate.split('-').map(Number);
       const dataHora = new Date(year, month - 1, day, hours, minutes);
+
+      const valorEstimadoNum = newValorEstimadoMasked
+        ? unmaskCurrencyBRL(newValorEstimadoMasked)
+        : null;
 
       const payload = {
         clientId: newClientId,
         dataHora: dataHora.toISOString(),
-        valorEstimado: newValorEstimado ? parseFloat(newValorEstimado) : null,
+        valorEstimado: valorEstimadoNum,
         observacoes: newObservacoes.trim() || null,
         plannedProcedureIds: newSelectedProcedures,
       };
@@ -313,10 +382,9 @@ export default function AgendaPage() {
 
       // Success
       setShowNewDialog(false);
-      // Reset form
       setNewClientId('');
       setNewSelectedProcedures([]);
-      setNewValorEstimado('');
+      setNewValorEstimadoMasked('');
       setNewObservacoes('');
       await loadAppointments();
     } catch (err: any) {
@@ -401,8 +469,9 @@ export default function AgendaPage() {
 
   const handleRescheduleAppointment = async () => {
     if (!selectedAppointment) return;
-    if (!rescheduleDate || !rescheduleTime) {
-      setRescheduleError('Informe a nova data e o horário.');
+    const isoRescheduleDate = dateBRToISO(rescheduleDateMasked);
+    if (!isoRescheduleDate || !rescheduleTime) {
+      setRescheduleError('Informe uma nova data válida (DD/MM/AAAA) e o horário.');
       return;
     }
 
@@ -411,7 +480,7 @@ export default function AgendaPage() {
       setRescheduleError(null);
 
       const [hours, minutes] = rescheduleTime.split(':').map(Number);
-      const [year, month, day] = rescheduleDate.split('-').map(Number);
+      const [year, month, day] = isoRescheduleDate.split('-').map(Number);
       const novaDataHora = new Date(year, month - 1, day, hours, minutes);
 
       const res = await fetch(`/api/appointments/${selectedAppointment.id}/reschedule`, {
@@ -508,7 +577,9 @@ export default function AgendaPage() {
               start: dateRange.startDate,
               end: dateRange.endDate,
             }).map((day, idx) => {
+              const dayKey = format(day, 'yyyy-MM-dd');
               const dayAppointments = appointments.filter((a) => isSameDay(parseISO(a.dataHora), day));
+              const dayReminders = remindersByDayMap.get(dayKey) || [];
               const inCurrentMonth = isSameMonth(day, currentDate);
               const isCurrentDay = isToday(day);
 
@@ -527,33 +598,42 @@ export default function AgendaPage() {
                     >
                       {format(day, 'd')}
                     </span>
-                    {dayAppointments.length > 0 && (
-                      <span className="text-[10px] text-muted-foreground font-medium hidden sm:inline">
-                        {dayAppointments.length} agend.
-                      </span>
-                    )}
+
+                    <div className="flex items-center gap-1">
+                      {dayReminders.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleNavigateRemindersForDay(day, e)}
+                          title={`${dayReminders.length} lembrete(s) pendente(s) neste dia. Clique para ver.`}
+                          className="inline-flex items-center gap-0.5 rounded-full bg-amber-100/90 hover:bg-amber-200 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300/60 px-1.5 py-0.5 text-[10px] font-semibold transition-colors"
+                        >
+                          <Bell className="h-2.5 w-2.5 fill-amber-500 text-amber-600" />
+                          <span>{dayReminders.length}</span>
+                        </button>
+                      )}
+                      {dayAppointments.length > 0 && (
+                        <span className="text-[10px] text-muted-foreground font-medium hidden sm:inline">
+                          {dayAppointments.length} agend.
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="space-y-1 overflow-y-auto flex-1 max-h-[90px]">
-                    {dayAppointments.map((appt) => {
-                      const procText =
-                        appt.plannedProcedures?.map((p) => p.procedure.nome).join(', ') ||
-                        'Sem procedimento';
-                      return (
-                        <button
-                          key={appt.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedAppointment(appt);
-                            setShowDetailDialog(true);
-                          }}
-                          className="w-full text-left p-1 rounded text-[11px] bg-primary/10 hover:bg-primary/20 border border-primary/20 truncate block transition-colors"
-                        >
-                          <span className="font-semibold mr-1">{formatTime(new Date(appt.dataHora))}</span>
-                          <span>{appt.client?.nome}</span>
-                        </button>
-                      );
-                    })}
+                    {dayAppointments.map((appt) => (
+                      <button
+                        key={appt.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedAppointment(appt);
+                          setShowDetailDialog(true);
+                        }}
+                        className="w-full text-left p-1 rounded text-[11px] bg-primary/10 hover:bg-primary/20 border border-primary/20 truncate block transition-colors"
+                      >
+                        <span className="font-semibold mr-1">{formatTime(new Date(appt.dataHora))}</span>
+                        <span>{appt.client?.nome}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
               );
@@ -569,12 +649,32 @@ export default function AgendaPage() {
               {eachDayOfInterval({
                 start: dateRange.startDate,
                 end: dateRange.endDate,
-              }).map((day, idx) => (
-                <div key={idx} className={isToday(day) ? 'text-primary font-bold' : ''}>
-                  <div>{format(day, 'EEE', { locale: ptBR })}</div>
-                  <div className="text-xs text-muted-foreground">{format(day, 'dd/MM')}</div>
-                </div>
-              ))}
+              }).map((day, idx) => {
+                const dayKey = format(day, 'yyyy-MM-dd');
+                const dayReminders = remindersByDayMap.get(dayKey) || [];
+                return (
+                  <div
+                    key={idx}
+                    className={`relative px-1 ${isToday(day) ? 'text-primary font-bold' : ''}`}
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      <span>{format(day, 'EEE', { locale: ptBR })}</span>
+                      {dayReminders.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleNavigateRemindersForDay(day, e)}
+                          title={`${dayReminders.length} lembrete(s) pendente(s) neste dia`}
+                          className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300/60 px-1.5 py-0.5 text-[10px] font-semibold transition-colors"
+                        >
+                          <Bell className="h-2.5 w-2.5 fill-amber-500 text-amber-600" />
+                          <span>{dayReminders.length}</span>
+                        </button>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground">{format(day, 'dd/MM')}</div>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="grid grid-cols-7 divide-x min-h-[400px]">
@@ -618,8 +718,24 @@ export default function AgendaPage() {
 
       {view === 'dia' && (
         <div className="border rounded-lg bg-card p-4 space-y-4 max-w-2xl mx-auto">
-          <div className="text-center font-semibold text-lg border-b pb-2">
-            {format(currentDate, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+          <div className="flex items-center justify-between border-b pb-2">
+            <div className="font-semibold text-lg capitalize">
+              {format(currentDate, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+            </div>
+            {(remindersByDayMap.get(format(currentDate, 'yyyy-MM-dd')) || []).length > 0 && (
+              <button
+                type="button"
+                onClick={(e) => handleNavigateRemindersForDay(currentDate, e)}
+                className="inline-flex items-center gap-1 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300/60 px-2.5 py-1 text-xs font-semibold transition-colors"
+                title="Ver lembretes deste dia"
+              >
+                <Bell className="h-3.5 w-3.5 fill-amber-500 text-amber-600" />
+                <span>
+                  {(remindersByDayMap.get(format(currentDate, 'yyyy-MM-dd')) || []).length}{' '}
+                  lembrete(s)
+                </span>
+              </button>
+            )}
           </div>
           {appointments.filter((a) => isSameDay(parseISO(a.dataHora), currentDate)).length === 0 ? (
             <p className="text-muted-foreground text-center py-8">Nenhum agendamento para este dia.</p>
@@ -734,18 +850,15 @@ export default function AgendaPage() {
             {/* Cliente */}
             <div className="space-y-1.5">
               <Label htmlFor="client-select">Cliente *</Label>
-              <Select value={newClientId} onValueChange={setNewClientId}>
-                <SelectTrigger id="client-select">
-                  <SelectValue placeholder="Selecione um cliente..." />
-                </SelectTrigger>
-                <SelectContent className="max-h-56">
-                  {clients.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.nome} {c.telefone ? `(${c.telefone})` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <AppCombobox
+                id="client-select"
+                options={clientComboboxOptions}
+                value={newClientId}
+                onChange={setNewClientId}
+                placeholder="Selecione um cliente..."
+                searchPlaceholder="Buscar cliente por nome ou telefone..."
+                searchable
+              />
             </div>
 
             {/* Data e Horário */}
@@ -754,9 +867,12 @@ export default function AgendaPage() {
                 <Label htmlFor="appt-date">Data *</Label>
                 <Input
                   id="appt-date"
-                  type="date"
-                  value={newDate}
-                  onChange={(e) => setNewDate(e.target.value)}
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="DD/MM/AAAA"
+                  maxLength={10}
+                  value={newDateMasked}
+                  onChange={(e) => setNewDateMasked(maskDateBR(e.target.value))}
                   required
                 />
               </div>
@@ -778,12 +894,27 @@ export default function AgendaPage() {
               <p className="text-xs text-muted-foreground">
                 Planejamento inicial (separado da execução clínica real no atendimento).
               </p>
-              <div className="border rounded-md p-3 max-h-40 overflow-y-auto space-y-2 bg-muted/10">
+              <AppCombobox
+                options={procedures.map((proc) => ({
+                  value: proc.id,
+                  label: `${proc.nome} — ${formatCurrency(getProcedurePrice(proc))}`,
+                  sublabel: proc.duracaoMinutos ? `${proc.duracaoMinutos} min` : undefined,
+                }))}
+                value=""
+                onChange={(procId) => {
+                  if (procId) handleToggleProcedure(procId);
+                }}
+                placeholder="Adicionar ou remover procedimento pela busca..."
+                searchPlaceholder="Buscar procedimento..."
+                searchable
+              />
+              <div className="border rounded-md p-3 max-h-40 overflow-y-auto space-y-1.5 bg-muted/10">
                 {procedures.length === 0 ? (
                   <p className="text-xs text-muted-foreground">Nenhum procedimento cadastrado.</p>
                 ) : (
                   procedures.map((proc) => {
                     const isSelected = newSelectedProcedures.includes(proc.id);
+                    const price = getProcedurePrice(proc);
                     return (
                       <label
                         key={proc.id}
@@ -801,8 +932,8 @@ export default function AgendaPage() {
                             <span className="text-muted-foreground">({proc.duracaoMinutos} min)</span>
                           )}
                         </div>
-                        <span className="font-semibold text-muted-foreground">
-                          {formatCurrency(Number(proc.precoPadrao || 0))}
+                        <span className="font-semibold text-foreground">
+                          {formatCurrency(price)}
                         </span>
                       </label>
                     );
@@ -816,11 +947,11 @@ export default function AgendaPage() {
               <Label htmlFor="valor-estimado">Valor Estimado (R$)</Label>
               <Input
                 id="valor-estimado"
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                value={newValorEstimado}
-                onChange={(e) => setNewValorEstimado(e.target.value)}
+                type="text"
+                inputMode="numeric"
+                placeholder="R$ 0,00"
+                value={newValorEstimadoMasked}
+                onChange={(e) => setNewValorEstimadoMasked(maskCurrencyBRL(e.target.value))}
               />
             </div>
 
@@ -893,7 +1024,7 @@ export default function AgendaPage() {
                 </div>
               </div>
 
-              {selectedAppointment.valorEstimado && (
+              {selectedAppointment.valorEstimado != null && (
                 <div>
                   <Label className="text-xs text-muted-foreground">Valor Estimado:</Label>
                   <p className="font-semibold text-base">
@@ -946,7 +1077,9 @@ export default function AgendaPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                          setRescheduleDate(format(parseISO(selectedAppointment.dataHora), 'yyyy-MM-dd'));
+                          setRescheduleDateMasked(
+                            isoToDateBR(format(parseISO(selectedAppointment.dataHora), 'yyyy-MM-dd'))
+                          );
                           setRescheduleTime(format(parseISO(selectedAppointment.dataHora), 'HH:mm'));
                           setShowRescheduleDialog(true);
                         }}
@@ -1054,9 +1187,12 @@ export default function AgendaPage() {
                 <Label htmlFor="resched-date">Nova Data *</Label>
                 <Input
                   id="resched-date"
-                  type="date"
-                  value={rescheduleDate}
-                  onChange={(e) => setRescheduleDate(e.target.value)}
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="DD/MM/AAAA"
+                  maxLength={10}
+                  value={rescheduleDateMasked}
+                  onChange={(e) => setRescheduleDateMasked(maskDateBR(e.target.value))}
                 />
               </div>
               <div className="space-y-1">
