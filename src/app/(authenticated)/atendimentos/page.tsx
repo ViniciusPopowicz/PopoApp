@@ -4,23 +4,21 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
 import { StatusBadge } from '@/components/shared/status-badge';
-import { SearchInput } from '@/components/shared/search-input';
+import { ListingToolbar } from '@/components/shared/listing-toolbar';
+import { AppCombobox } from '@/components/ui/app-combobox';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { useDebounce } from '@/hooks/use-debounce';
 import {
   ClipboardList,
   Eye,
-  Plus,
   RefreshCw,
-  ExternalLink,
-  DollarSign,
   Calendar,
   AlertCircle,
 } from 'lucide-react';
-import { formatCurrency, formatDate, formatDateTime, formatTime } from '@/lib/format';
+import { formatCurrency, formatDateTime } from '@/lib/format';
 
 interface AttendanceItem {
   id: string;
@@ -64,6 +62,7 @@ export default function AtendimentosPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearchTerm = useDebounce(searchTerm, 350);
   const [statusFilter, setStatusFilter] = useState<'todos' | 'Pendente' | 'Realizado' | 'Cancelado'>('todos');
 
   const fetchAttendances = async () => {
@@ -104,25 +103,16 @@ export default function AtendimentosPage() {
   const filteredAttendances = attendances.filter((atend) => {
     const clientName = atend.client?.nome?.toLowerCase() || '';
     const procNames = atend.procedures?.map((p) => p.procedure.nome.toLowerCase()).join(' ') || '';
-    const q = searchTerm.toLowerCase();
+    const q = debouncedSearchTerm.toLowerCase();
     return clientName.includes(q) || procNames.includes(q);
   });
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <PageHeader
-          title="Atendimentos Clínicos"
-          description="Acompanhamento da execução clínica, prontuários e registros de procedimentos."
-        >
-          <Button asChild>
-            <Link href="/agenda">
-              <Calendar className="mr-2 h-4 w-4" />
-              Ver Agenda / Novo Atendimento
-            </Link>
-          </Button>
-        </PageHeader>
-      </div>
+      <PageHeader
+        title="Atendimentos Clínicos"
+        description="Acompanhamento da execução clínica, prontuários e registros de procedimentos."
+      />
 
       {error && (
         <div className="p-4 rounded-md bg-destructive/15 text-destructive border border-destructive/20 text-sm flex items-center gap-2">
@@ -131,32 +121,39 @@ export default function AtendimentosPage() {
         </div>
       )}
 
-      {/* Filters and Search */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-card p-4 rounded-lg border">
-        <Tabs
-          value={statusFilter}
-          onValueChange={(v) => setStatusFilter(v as any)}
-          className="w-full sm:w-auto"
-        >
-          <TabsList className="grid grid-cols-4 sm:flex">
-            <TabsTrigger value="todos">Todos</TabsTrigger>
-            <TabsTrigger value="Pendente">Pendente</TabsTrigger>
-            <TabsTrigger value="Realizado">Realizado</TabsTrigger>
-            <TabsTrigger value="Cancelado">Cancelado</TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        <div className="flex items-center gap-2 w-full sm:w-72">
-          <SearchInput
-            value={searchTerm}
-            onChange={setSearchTerm}
-            placeholder="Buscar por cliente ou procedimento..."
+      {/* Standardized Listing Toolbar (IMPROVEMENT-003, 004, 005, 007) */}
+      <ListingToolbar
+        searchPlaceholder="Buscar por cliente ou procedimento..."
+        searchValue={searchTerm}
+        onSearchChange={setSearchTerm}
+        filters={
+          <AppCombobox
+            options={[
+              { value: 'todos', label: 'Todos os Status' },
+              { value: 'Pendente', label: 'Pendente' },
+              { value: 'Realizado', label: 'Realizado' },
+              { value: 'Cancelado', label: 'Cancelado' },
+            ]}
+            value={statusFilter}
+            onChange={(v) => setStatusFilter(v as any)}
+            searchable={false}
+            className="w-[180px]"
           />
-          <Button variant="ghost" size="icon" onClick={fetchAttendances} disabled={loading} title="Recarregar">
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </Button>
-        </div>
-      </div>
+        }
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" onClick={fetchAttendances} disabled={loading} title="Recarregar">
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
+            <Button asChild>
+              <Link href="/agenda">
+                <Calendar className="mr-2 h-4 w-4" />
+                Ver Agenda / Novo Atendimento
+              </Link>
+            </Button>
+          </div>
+        }
+      />
 
       {/* List */}
       {loading ? (
@@ -166,7 +163,7 @@ export default function AtendimentosPage() {
           icon={ClipboardList}
           title="Nenhum atendimento encontrado"
           description={
-            searchTerm
+            debouncedSearchTerm
               ? 'Nenhum atendimento corresponde aos termos da busca.'
               : `Não há atendimentos com o status "${statusFilter}".`
           }

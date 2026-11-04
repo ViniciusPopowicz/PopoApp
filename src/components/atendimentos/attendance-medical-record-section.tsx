@@ -101,7 +101,7 @@ export function AttendanceMedicalRecordSection({
         <div>
           <CardTitle className="text-lg flex items-center gap-2">
             <FileText className="h-5 w-5 text-primary" />
-            Prontuário e Anotações Clínicas (1:1)
+            Prontuário e Anotações Clínicas
           </CardTitle>
           <CardDescription>
             Registro de anamnese, evolução do procedimento, cuidados pós-procedimento e histórico de intercorrências.

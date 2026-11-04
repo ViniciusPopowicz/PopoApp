@@ -1,445 +1,393 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
-import { PageHeader } from '@/components/shared/page-header';
-import { StatusBadge } from '@/components/shared/status-badge';
-import { SearchInput } from '@/components/shared/search-input';
-import { EmptyState } from '@/components/shared/empty-state';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Plus, Users, Eye, Pencil, Power, Phone, Mail, FileText, AlertCircle } from 'lucide-react';
-import { formatDate } from '@/lib/format';
-import { formatCpf, normalizeCpf } from '@/lib/cpf';
-import { ClientFormDialog, ClientFormData } from '@/components/clientes/client-form-dialog';
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { AppCombobox } from '@/components/ui/app-combobox';
+import { ListingToolbar } from '@/components/shared/listing-toolbar';
+import { RowStatusToggle } from '@/components/shared/row-status-toggle';
+import { useDebounce } from '@/hooks/use-debounce';
+import { formatCpf } from '@/lib/cpf';
+import { formatPhone } from '@/lib/format';
+import { ClientSummaryDto } from '@/types/client';
+import { ClientFormDialog } from '@/components/clientes/client-form-dialog';
+import {
+  UserPlus,
+  Users,
+  Eye,
+  Edit2,
+  Phone,
+  ShieldAlert,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
 
-interface ClientItem {
-  id: string;
-  nome: string;
-  cpf: string;
-  telefone: string;
-  email: string | null;
-  dataNascimento: string | null;
-  endereco: string | null;
-  observacoes: string | null;
-  status: 'ativo' | 'inativo';
-  profilePhotoId: string | null;
-  createdAt: string;
-  updatedAt: string;
-  emergencyContacts?: Array<{
-    id: string;
-    nome: string;
-    telefone: string;
-    parentesco: string;
-    observacoes?: string | null;
-    isActive: boolean;
-  }>;
-  _count?: {
-    appointments: number;
-    attendances: number;
-    attachments: number;
-  };
-}
+const STATUS_FILTER_OPTIONS = [
+  { value: 'ativo', label: 'Somente Ativos' },
+  { value: 'inativo', label: 'Somente Inativos' },
+  { value: 'todos', label: 'Todos os Clientes' },
+];
 
 export default function ClientesPage() {
-  const [clients, setClients] = useState<ClientItem[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'todos' | 'ativo' | 'inativo'>('todos');
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
-  // Modal state
-  const [isFormDialogOpen, setIsFormDialogOpen] = useState(false);
-  const [selectedClientForEdit, setSelectedClientForEdit] = useState<ClientFormData | null>(null);
+  const [clients, setClients] = useState<ClientSummaryDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 350);
+  const [statusFilter, setStatusFilter] = useState<'ativo' | 'inativo' | 'todos'>('todos');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+
+  // Dialog states
+  const [formOpen, setFormOpen] = useState(false);
+  const [clientToEdit, setClientToEdit] = useState<ClientSummaryDto | null>(null);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, statusFilter]);
 
   const fetchClients = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+    setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (searchTerm.trim()) {
-        params.set('search', searchTerm.trim());
+      const params = new URLSearchParams({
+        status: statusFilter,
+        page: String(page),
+        limit: '15',
+      });
+      if (debouncedSearch.trim()) {
+        params.set('search', debouncedSearch.trim());
       }
-      if (statusFilter !== 'todos') {
-        params.set('status', statusFilter);
-      } else {
-        params.set('status', 'todos');
-      }
-      params.set('limit', '100');
 
       const res = await fetch(`/api/clients?${params.toString()}`);
       const json = await res.json();
-
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || 'Falha ao carregar lista de clientes');
+      if (res.ok && json.success) {
+        setClients(json.items || json.data || []);
+        setTotalPages(json.pagination?.totalPages || 1);
+        setTotalCount(json.pagination?.total || 0);
       }
-
-      setClients(json.items || []);
-    } catch (err: any) {
-      console.error('Erro ao buscar clientes:', err);
-      setError(err.message || 'Erro ao carregar clientes do servidor.');
+    } catch (error) {
+      console.error('Failed to fetch clients:', error);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  }, [searchTerm, statusFilter]);
+  }, [debouncedSearch, statusFilter, page]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchClients();
-    }, 250);
-    return () => clearTimeout(timer);
+    fetchClients();
   }, [fetchClients]);
 
-  // Client-side fuzzy filter for normalized CPF and Name in real-time
-  const filteredClients = clients.filter((client) => {
-    if (!searchTerm.trim()) return true;
-    const term = searchTerm.toLowerCase().trim();
-    const cleanTermDigits = normalizeCpf(term);
-    const matchesName = client.nome.toLowerCase().includes(term);
-    const matchesEmail = client.email ? client.email.toLowerCase().includes(term) : false;
-    const matchesPhone = client.telefone.includes(term);
-    const matchesCpf = cleanTermDigits
-      ? client.cpf.includes(cleanTermDigits)
-      : client.cpf.includes(term);
+  const handleOpenCreate = () => {
+    setClientToEdit(null);
+    setFormOpen(true);
+  };
 
-    return matchesName || matchesEmail || matchesPhone || matchesCpf;
-  });
+  const handleOpenEdit = (client: ClientSummaryDto, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setClientToEdit(client);
+    setFormOpen(true);
+  };
 
-  async function handleToggleStatus(client: ClientItem) {
-    const nextStatus = client.status === 'ativo' ? 'inativo' : 'ativo';
-    const confirmMessage =
-      client.status === 'ativo'
-        ? `Deseja inativar o cliente "${client.nome}"? O histórico clínico e financeiro será preservado.`
-        : `Deseja reativar o cliente "${client.nome}"?`;
-
-    if (!window.confirm(confirmMessage)) return;
-
-    try {
-      const res = await fetch(`/api/clients/${client.id}`, {
-        method: nextStatus === 'inativo' ? 'DELETE' : 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        ...(nextStatus === 'ativo' ? { body: JSON.stringify({ status: 'ativo' }) } : {}),
-      });
-
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || 'Erro ao alterar status do cliente');
-      }
-
-      fetchClients();
-    } catch (err: any) {
-      alert(err.message || 'Não foi possível alterar o status.');
-    }
-  }
-
-  function handleOpenCreate() {
-    setSelectedClientForEdit(null);
-    setIsFormDialogOpen(true);
-  }
-
-  function handleOpenEdit(client: ClientItem) {
-    setSelectedClientForEdit({
-      id: client.id,
-      nome: client.nome,
-      cpf: client.cpf,
-      telefone: client.telefone,
-      email: client.email,
-      dataNascimento: client.dataNascimento,
-      endereco: client.endereco,
-      observacoes: client.observacoes,
-      status: client.status,
-      profilePhotoId: client.profilePhotoId,
-      emergencyContacts: client.emergencyContacts,
+  const handleToggleClientStatus = async (
+    client: ClientSummaryDto,
+    nextActive: boolean
+  ) => {
+    const nextStatus = nextActive ? 'ativo' : 'inativo';
+    const res = await fetch(`/api/clients/${client.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: nextStatus }),
     });
-    setIsFormDialogOpen(true);
-  }
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      throw new Error(json.error || 'Erro ao alterar status do cliente');
+    }
+    setClients((prev) =>
+      prev.map((item) =>
+        item.id === client.id ? { ...item, status: nextStatus } : item
+      )
+    );
+  };
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Clientes"
-        description="Gerencie os pacientes cadastrados, dados de contato e prontuários clínicos."
-      >
-        <Button onClick={handleOpenCreate}>
-          <Plus className="mr-2 h-4 w-4" />
-          Novo Cliente
-        </Button>
-      </PageHeader>
-
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center justify-between">
-        <div className="w-full sm:max-w-md">
-          <SearchInput
-            value={searchTerm}
-            onChange={setSearchTerm}
-            placeholder="Buscar por nome ou CPF..."
-          />
-        </div>
-
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant={statusFilter === 'todos' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setStatusFilter('todos')}
-          >
-            Todos
-          </Button>
-          <Button
-            type="button"
-            variant={statusFilter === 'ativo' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setStatusFilter('ativo')}
-          >
-            Ativos
-          </Button>
-          <Button
-            type="button"
-            variant={statusFilter === 'inativo' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setStatusFilter('inativo')}
-          >
-            Inativos
-          </Button>
+      {/* Header */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Users className="h-6 w-6 text-primary" />
+            Clientes & Prontuários
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Gerencie o cadastro completo de pacientes, contatos de emergência e histórico clínico.
+          </p>
         </div>
       </div>
 
-      {error && (
-        <div className="flex items-center gap-2 p-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md">
-          <AlertCircle className="h-5 w-5 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
+      {/* Standardized Listing Toolbar (Search on left, Filters + Create Button on right) */}
+      <ListingToolbar
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Buscar por nome, CPF ou telefone..."
+        rightSlot={
+          <>
+            <div className="w-48">
+              <AppCombobox
+                options={STATUS_FILTER_OPTIONS}
+                value={statusFilter}
+                onChange={(val) =>
+                  setStatusFilter(val as 'ativo' | 'inativo' | 'todos')
+                }
+                placeholder="Filtrar status"
+              />
+            </div>
+            <Button onClick={handleOpenCreate} className="gap-2">
+              <UserPlus className="h-4 w-4" />
+              Novo Cliente
+            </Button>
+          </>
+        }
+      />
 
-      {isLoading ? (
-        <div className="p-12 text-center text-muted-foreground flex flex-col items-center gap-2">
-          <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          <span>Carregando pacientes...</span>
-        </div>
-      ) : filteredClients.length === 0 ? (
-        <EmptyState
-          icon={Users}
-          title="Nenhum cliente encontrado"
-          description={
-            searchTerm
-              ? 'Nenhum paciente corresponde aos critérios de busca por nome ou CPF.'
-              : 'Você ainda não possui clientes cadastrados no sistema.'
-          }
-          actionLabel={!searchTerm ? 'Cadastrar Primeiro Cliente' : undefined}
-          onAction={!searchTerm ? handleOpenCreate : undefined}
-        />
-      ) : (
-        <>
-          {/* Desktop Table View */}
-          <div className="hidden md:block rounded-md border bg-card overflow-hidden">
-            <Table>
-              <TableHeader>
+      {/* Listing Table */}
+      <Card className="shadow-sm overflow-hidden">
+        <div className="hidden md:block">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40">
+                <TableHead>Paciente</TableHead>
+                <TableHead>CPF</TableHead>
+                <TableHead>Contato</TableHead>
+                <TableHead>Emergência</TableHead>
+                <TableHead className="text-center">Atendimentos</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell colSpan={7} className="h-14 animate-pulse bg-muted/20" />
+                  </TableRow>
+                ))
+              ) : clients.length === 0 ? (
                 <TableRow>
-                  <TableHead className="w-[50px]"></TableHead>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>CPF</TableHead>
-                  <TableHead>Contato</TableHead>
-                  <TableHead>Contatos Emergência</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
+                  <TableCell colSpan={7} className="h-36 text-center text-muted-foreground">
+                    Nenhum cliente encontrado para os filtros selecionados.
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredClients.map((client) => {
-                  const initial = client.nome ? client.nome.charAt(0).toUpperCase() : '?';
-                  const contactsCount = client.emergencyContacts?.length || 0;
-
-                  return (
-                    <TableRow key={client.id} className="hover:bg-muted/50">
-                      <TableCell>
-                        <Avatar className="h-9 w-9">
-                          {client.profilePhotoId ? (
-                            <AvatarImage
-                              src={`/api/attachments/${client.profilePhotoId}`}
-                              alt={client.nome}
-                            />
-                          ) : null}
-                          <AvatarFallback className="bg-primary/10 text-primary font-medium text-xs">
-                            {initial}
-                          </AvatarFallback>
-                        </Avatar>
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-medium text-foreground">
-                          <Link
-                            href={`/clientes/${client.id}`}
-                            className="hover:underline text-primary font-semibold"
-                          >
-                            {client.nome}
-                          </Link>
-                        </div>
-                        {client.dataNascimento && (
-                          <span className="text-xs text-muted-foreground">
-                            Nasc: {formatDate(new Date(client.dataNascimento))}
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="font-mono text-sm text-muted-foreground">
-                        {formatCpf(client.cpf)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">{client.telefone}</div>
-                        {client.email && (
-                          <div className="text-xs text-muted-foreground truncate max-w-[180px]">
-                            {client.email}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {contactsCount > 0 ? (
-                          <Badge variant="outline" className="text-xs">
-                            {contactsCount} contato(s)
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground italic">Nenhum</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={client.status} />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Link href={`/clientes/${client.id}`}>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="Ver Prontuário e Histórico Clínico"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          </Link>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleOpenEdit(client)}
-                            title="Editar Dados Cadastrais"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleToggleStatus(client)}
-                            title={client.status === 'ativo' ? 'Inativar Paciente' : 'Reativar Paciente'}
-                            className={
-                              client.status === 'ativo'
-                                ? 'text-muted-foreground hover:text-destructive'
-                                : 'text-primary hover:text-primary'
-                            }
-                          >
-                            <Power className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-
-          {/* Mobile Cards View */}
-          <div className="grid grid-cols-1 gap-4 md:hidden">
-            {filteredClients.map((client) => {
-              const initial = client.nome ? client.nome.charAt(0).toUpperCase() : '?';
-
-              return (
-                <Card key={client.id} className="overflow-hidden">
-                  <CardContent className="p-4 space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-10 w-10 shrink-0">
-                          {client.profilePhotoId ? (
-                            <AvatarImage
-                              src={`/api/attachments/${client.profilePhotoId}`}
-                              alt={client.nome}
-                            />
-                          ) : null}
-                          <AvatarFallback className="bg-primary/10 text-primary font-medium">
-                            {initial}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <Link
-                            href={`/clientes/${client.id}`}
-                            className="font-semibold text-primary hover:underline"
-                          >
-                            {client.nome}
-                          </Link>
-                          <p className="text-xs font-mono text-muted-foreground">
-                            CPF: {formatCpf(client.cpf)}
-                          </p>
-                        </div>
-                      </div>
-                      <StatusBadge status={client.status} />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground pt-1 border-t">
-                      <div className="flex items-center gap-1.5">
-                        <Phone className="h-3.5 w-3.5" />
-                        <span>{client.telefone}</span>
-                      </div>
+              ) : (
+                clients.map((client) => (
+                  <TableRow
+                    key={client.id}
+                    className={`cursor-pointer hover:bg-muted/40 transition-colors ${
+                      client.status !== 'ativo' ? 'opacity-70' : ''
+                    }`}
+                    onClick={() => router.push(`/clientes/${client.id}`)}
+                  >
+                    <TableCell>
+                      <div className="font-medium text-foreground">{client.nome}</div>
                       {client.email && (
-                        <div className="flex items-center gap-1.5 truncate">
-                          <Mail className="h-3.5 w-3.5 shrink-0" />
-                          <span className="truncate">{client.email}</span>
-                        </div>
+                        <div className="text-xs text-muted-foreground">{client.email}</div>
                       )}
-                    </div>
-
-                    <div className="flex justify-between items-center pt-2 border-t">
-                      <span className="text-xs text-muted-foreground">
-                        {client.emergencyContacts && client.emergencyContacts.length > 0
-                          ? `${client.emergencyContacts.length} contato(s) emergência`
-                          : 'Sem contato emergência'}
-                      </span>
-                      <div className="flex gap-1">
-                        <Link href={`/clientes/${client.id}`}>
-                          <Button variant="outline" size="sm" className="h-8 px-2 text-xs">
-                            <Eye className="h-3.5 w-3.5 mr-1" />
-                            Detalhes
-                          </Button>
-                        </Link>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {formatCpf(client.cpf)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5 text-sm">
+                        <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                        {formatPhone(client.telefone)}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {client.emergencyContacts && client.emergencyContacts.length > 0 ? (
+                        <div className="text-xs">
+                          <span className="font-medium">
+                            {client.emergencyContacts[0].nome}
+                          </span>{' '}
+                          <span className="text-muted-foreground">
+                            ({client.emergencyContacts[0].parentesco})
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">
+                          Não informado
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant="outline" className="font-mono">
+                        {client._count?.attendances ?? 0}
+                      </Badge>
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <RowStatusToggle
+                        isActive={client.status === 'ativo'}
+                        onToggle={(nextActive) =>
+                          handleToggleClientStatus(client, nextActive)
+                        }
+                      />
+                    </TableCell>
+                    <TableCell
+                      className="text-right"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center justify-end gap-1">
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          className="h-8 px-2 text-xs"
-                          onClick={() => handleOpenEdit(client)}
+                          onClick={() => router.push(`/clientes/${client.id}`)}
+                          title="Abrir Prontuário Completo"
                         >
-                          <Pencil className="h-3.5 w-3.5" />
+                          <Eye className="h-4 w-4 mr-1" />
+                          Ficha
                         </Button>
                         <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 px-2 text-xs"
-                          onClick={() => handleToggleStatus(client)}
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => handleOpenEdit(client, e)}
+                          title="Editar Cadastro"
                         >
-                          <Power className="h-3.5 w-3.5" />
+                          <Edit2 className="h-4 w-4" />
                         </Button>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </>
-      )}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
 
-      {/* Create / Edit Client Dialog */}
+        {/* Mobile Cards View */}
+        <div className="grid grid-cols-1 divide-y md:hidden">
+          {loading ? (
+            <div className="p-6 text-center text-sm text-muted-foreground">
+              Carregando clientes...
+            </div>
+          ) : clients.length === 0 ? (
+            <div className="p-8 text-center text-sm text-muted-foreground">
+              Nenhum cliente encontrado.
+            </div>
+          ) : (
+            clients.map((client) => (
+              <div
+                key={client.id}
+                onClick={() => router.push(`/clientes/${client.id}`)}
+                className="p-4 space-y-2.5 active:bg-muted/50 cursor-pointer"
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="font-semibold text-base">{client.nome}</h3>
+                    <p className="text-xs font-mono text-muted-foreground">
+                      CPF: {formatCpf(client.cpf)}
+                    </p>
+                  </div>
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <RowStatusToggle
+                      isActive={client.status === 'ativo'}
+                      onToggle={(nextActive) =>
+                        handleToggleClientStatus(client, nextActive)
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Phone className="h-3.5 w-3.5" />
+                    {formatPhone(client.telefone)}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Calendar className="h-3.5 w-3.5" />
+                    {client._count?.attendances ?? 0} atendimentos
+                  </span>
+                  {client.emergencyContacts?.length > 0 && (
+                    <span className="flex items-center gap-1 text-amber-700 dark:text-amber-400">
+                      <ShieldAlert className="h-3.5 w-3.5" />
+                      {client.emergencyContacts.length} contato(s) emergência
+                    </span>
+                  )}
+                </div>
+
+                <div
+                  className="flex items-center justify-end gap-2 pt-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => handleOpenEdit(client, e)}
+                  >
+                    <Edit2 className="h-3.5 w-3.5 mr-1" />
+                    Editar
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => router.push(`/clientes/${client.id}`)}
+                  >
+                    <Eye className="h-3.5 w-3.5 mr-1" />
+                    Prontuário
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Pagination Footer */}
+        {totalPages > 1 && (
+          <CardContent className="flex items-center justify-between border-t py-3 px-4 bg-muted/20">
+            <span className="text-xs text-muted-foreground">
+              Total de <strong>{totalCount}</strong> paciente(s) • Página {page} de{' '}
+              {totalPages}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Anterior
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Próxima
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
+      {/* Create/Edit Client Dialog */}
       <ClientFormDialog
-        open={isFormDialogOpen}
-        onOpenChange={setIsFormDialogOpen}
-        client={selectedClientForEdit}
-        onSuccess={fetchClients}
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        clientToEdit={clientToEdit}
+        onSuccess={() => {
+          fetchClients();
+        }}
       />
     </div>
   );

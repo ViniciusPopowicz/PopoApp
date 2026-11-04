@@ -1,18 +1,28 @@
 
-export function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+export function formatCurrency(value: number | null | undefined): string {
+  const val = typeof value === 'number' && !isNaN(value) ? value : 0;
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 }
 
-export function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat('pt-BR').format(date);
+export function formatDate(date: Date | string | null | undefined): string {
+  if (!date) return '—';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (!(d instanceof Date) || isNaN(d.getTime())) return '—';
+  return new Intl.DateTimeFormat('pt-BR').format(d);
 }
 
-export function formatDateTime(date: Date): string {
-  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(date);
+export function formatDateTime(date: Date | string | null | undefined): string {
+  if (!date) return '—';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (!(d instanceof Date) || isNaN(d.getTime())) return '—';
+  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(d);
 }
 
-export function formatTime(date: Date): string {
-  return new Intl.DateTimeFormat('pt-BR', { timeStyle: 'short' }).format(date);
+export function formatTime(date: Date | string | null | undefined): string {
+  if (!date) return '—';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (!(d instanceof Date) || isNaN(d.getTime())) return '—';
+  return new Intl.DateTimeFormat('pt-BR', { timeStyle: 'short' }).format(d);
 }
 
 export function formatPhone(phone: string): string {

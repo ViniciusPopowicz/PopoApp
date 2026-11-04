@@ -194,31 +194,77 @@ export class FinancialService {
       }
     }
 
-    const isOverdue = startOfDay(new Date(input.dataVencimento)) < startOfDay(referenceDate);
-    const initialStatus: ObligationStatus = isOverdue ? 'Atrasado' : 'Pendente';
+    const isPaid = input.status === 'Pago' || Boolean((input as any).dataPagamento);
+    const isOverdue = !isPaid && startOfDay(new Date(input.dataVencimento)) < startOfDay(referenceDate);
+    const initialStatus: ObligationStatus = isPaid ? 'Pago' : isOverdue ? 'Atrasado' : 'Pendente';
 
-    const created = await prisma.financialObligation.create({
-      data: {
-        tipo: input.tipo,
-        descricao: input.descricao.trim(),
-        categoria: input.categoria ? input.categoria.trim() : null,
-        fornecedor: input.fornecedor ? input.fornecedor.trim() : null,
-        clientId: resolvedClientId,
-        appointmentId: resolvedAppointmentId,
-        attendanceId: resolvedAttendanceId,
-        valorOriginal: new Prisma.Decimal(input.valorOriginal),
-        dataVencimento: input.dataVencimento,
-        metodo: input.metodo ? input.metodo.trim() : null,
-        status: initialStatus,
-        observacoes: input.observacoes ? input.observacoes.trim() : null,
-      },
-      include: {
-        client: { select: { id: true, nome: true } },
-        settlements: { orderBy: { dataLiquidacao: 'asc' } },
-      },
+    const created = await prisma.$transaction(async (tx) => {
+      const ob = await tx.financialObligation.create({
+        data: {
+          tipo: input.tipo,
+          descricao: input.descricao.trim(),
+          categoria: input.categoria ? input.categoria.trim() : null,
+          fornecedor: input.fornecedor ? input.fornecedor.trim() : null,
+          clientId: resolvedClientId,
+          appointmentId: resolvedAppointmentId,
+          attendanceId: resolvedAttendanceId,
+          valorOriginal: new Prisma.Decimal(input.valorOriginal),
+          dataVencimento: input.dataVencimento,
+          metodo: input.metodo ? input.metodo.trim() : null,
+          status: initialStatus,
+          observacoes: input.observacoes ? input.observacoes.trim() : null,
+        },
+      });
+
+      if (isPaid) {
+        const payDate = (input as any).dataPagamento
+          ? new Date((input as any).dataPagamento)
+          : new Date(input.dataVencimento);
+        const settlement = await tx.financialSettlement.create({
+          data: {
+            obligationId: ob.id,
+            valor: new Prisma.Decimal(round2(input.valorOriginal)),
+            dataLiquidacao: payDate,
+            metodo: input.metodo ? input.metodo.trim() : 'Outro',
+            observacoes: 'Liquidação automática no cadastro da obrigação',
+            status: 'Ativo',
+          },
+        });
+
+        const movementType = ob.tipo === 'RECEIVABLE' ? 'ENTRADA' : 'SAIDA';
+        const movementOrigin =
+          ob.tipo === 'RECEIVABLE' ? 'LIQUIDACAO_RECEBER' : 'LIQUIDACAO_PAGAR';
+
+        await tx.financialMovement.create({
+          data: {
+            tipo: movementType,
+            origem: movementOrigin,
+            descricao: `Liquidação: ${ob.descricao}`,
+            categoria: ob.categoria,
+            valor: new Prisma.Decimal(round2(input.valorOriginal)),
+            dataMovimentacao: payDate,
+            metodo: input.metodo ? input.metodo.trim() : 'Outro',
+            status: 'Ativo',
+            clientId: ob.clientId,
+            appointmentId: ob.appointmentId,
+            attendanceId: ob.attendanceId,
+            obligationId: ob.id,
+            settlementId: settlement.id,
+            observacoes: ob.observacoes,
+          },
+        });
+      }
+
+      return await tx.financialObligation.findUnique({
+        where: { id: ob.id },
+        include: {
+          client: { select: { id: true, nome: true } },
+          settlements: { orderBy: { dataLiquidacao: 'asc' } },
+        },
+      });
     });
 
-    return this.formatObligation(created, referenceDate);
+    return this.formatObligation(created!, referenceDate);
   }
 
   /**
@@ -250,6 +296,16 @@ export class FinancialService {
       ...(query.attendanceId ? { attendanceId: query.attendanceId } : {}),
       ...(query.appointmentId ? { appointmentId: query.appointmentId } : {}),
       ...(query.categoria ? { categoria: query.categoria } : {}),
+      ...(query.search && query.search.trim()
+        ? {
+            OR: [
+              { descricao: { contains: query.search.trim() } },
+              { fornecedor: { contains: query.search.trim() } },
+              { categoria: { contains: query.search.trim() } },
+              { client: { nome: { contains: query.search.trim() } } },
+            ],
+          }
+        : {}),
       ...(query.startDate || query.endDate
         ? {
             dataVencimento: {
@@ -260,14 +316,22 @@ export class FinancialService {
         : {}),
     };
 
-    const rawItems = await prisma.financialObligation.findMany({
-      where,
-      orderBy: [{ dataVencimento: 'asc' }, { createdAt: 'desc' }],
-      include: {
-        client: { select: { id: true, nome: true } },
-        settlements: { orderBy: { dataLiquidacao: 'asc' } },
-      },
-    });
+    const { ensureDatabaseSchema } = await import('@/lib/db-bootstrap');
+    await ensureDatabaseSchema();
+
+    let rawItems: any[] = [];
+    try {
+      rawItems = await prisma.financialObligation.findMany({
+        where,
+        orderBy: [{ dataVencimento: 'asc' }, { createdAt: 'desc' }],
+        include: {
+          client: { select: { id: true, nome: true } },
+          settlements: { orderBy: { dataLiquidacao: 'asc' } },
+        },
+      });
+    } catch {
+      rawItems = [];
+    }
 
     let formatted = rawItems.map((item) => this.formatObligation(item, referenceDate));
 
@@ -790,7 +854,7 @@ export class FinancialService {
           descricao: `Estorno de ${orig.descricao}: ${reason}`,
           categoria: orig.categoria,
           valor: orig.valor,
-          dataMovimentacao: now,
+          dataMovimentacao: orig.dataMovimentacao ?? now,
           metodo: orig.metodo,
           status: 'Ativo',
           clientId: orig.clientId,
@@ -812,6 +876,9 @@ export class FinancialService {
    * Lists cash movements with filtering and pagination.
    */
   static async listMovements(query: Partial<MovementListQuery> = {}) {
+    const { ensureDatabaseSchema } = await import('@/lib/db-bootstrap');
+    await ensureDatabaseSchema();
+
     const where: Prisma.FinancialMovementWhereInput = {
       ...(query.tipo && query.tipo !== 'todos' ? { tipo: query.tipo } : {}),
       ...(query.status && query.status !== 'todos' ? { status: query.status } : {}),
@@ -819,6 +886,16 @@ export class FinancialService {
       ...(query.metodo ? { metodo: query.metodo } : {}),
       ...(query.categoria ? { categoria: query.categoria } : {}),
       ...(query.clientId ? { clientId: query.clientId } : {}),
+      ...(query.search && query.search.trim()
+        ? {
+            OR: [
+              { descricao: { contains: query.search.trim() } },
+              { categoria: { contains: query.search.trim() } },
+              { observacoes: { contains: query.search.trim() } },
+              { client: { nome: { contains: query.search.trim() } } },
+            ],
+          }
+        : {}),
       ...(query.startDate || query.endDate
         ? {
             dataMovimentacao: {
@@ -833,18 +910,25 @@ export class FinancialService {
     const limit = query.limit ?? 50;
     const skip = (page - 1) * limit;
 
-    const [total, rawItems] = await Promise.all([
-      prisma.financialMovement.count({ where }),
-      prisma.financialMovement.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: [{ dataMovimentacao: 'desc' }, { createdAt: 'desc' }],
-        include: {
-          client: { select: { id: true, nome: true } },
-        },
-      }),
-    ]);
+    let total = 0;
+    let rawItems: any[] = [];
+    try {
+      [total, rawItems] = await Promise.all([
+        prisma.financialMovement.count({ where }),
+        prisma.financialMovement.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: [{ dataMovimentacao: 'desc' }, { createdAt: 'desc' }],
+          include: {
+            client: { select: { id: true, nome: true } },
+          },
+        }),
+      ]);
+    } catch {
+      total = 0;
+      rawItems = [];
+    }
 
     return {
       items: rawItems.map((m) => this.formatMovement(m)),
@@ -863,31 +947,63 @@ export class FinancialService {
     endDate: Date,
     referenceDate: Date = new Date()
   ): Promise<CashFlowSummaryDto> {
-    // 1. Realized cash ledger movements within [startDate, endDate]
-    const movements = await prisma.financialMovement.findMany({
-      where: {
-        status: { in: ['Ativo', 'Realizado', 'Estornado'] },
-        dataMovimentacao: { gte: startDate, lte: endDate },
-      },
-    });
+    const { ensureDatabaseSchema } = await import('@/lib/db-bootstrap');
+    await ensureDatabaseSchema();
 
-    // Track which Payment IDs and PixInstallment IDs are already represented in FinancialMovement (across all time)
-    const allLinkedMovements = await prisma.financialMovement.findMany({
-      where: {
-        OR: [{ paymentId: { not: null } }, { pixInstallmentId: { not: null } }],
-      },
-      select: { paymentId: true, pixInstallmentId: true },
-    });
+    // 1. Realized cash ledger movements within [startDate, endDate]
+    let movements: any[] = [];
+    let allLinkedMovements: Array<{
+      paymentId: string | null;
+      pixInstallmentId: string | null;
+      obligationId: string | null;
+      settlementId: string | null;
+    }> = [];
+    try {
+      [movements, allLinkedMovements] = await Promise.all([
+        prisma.financialMovement.findMany({
+          where: {
+            status: { in: ['Ativo', 'Realizado', 'Estornado'] },
+            dataMovimentacao: { gte: startDate, lte: endDate },
+          },
+        }),
+        prisma.financialMovement.findMany({
+          where: {
+            OR: [
+              { paymentId: { not: null } },
+              { pixInstallmentId: { not: null } },
+              { obligationId: { not: null } },
+              { settlementId: { not: null } },
+            ],
+          },
+          select: {
+            paymentId: true,
+            pixInstallmentId: true,
+            obligationId: true,
+            settlementId: true,
+          },
+        }),
+      ]);
+    } catch {
+      movements = [];
+      allLinkedMovements = [];
+    }
+
     const coveredPaymentIds = new Set(
       allLinkedMovements.map((m) => m.paymentId).filter(Boolean) as string[]
     );
     const coveredInstallmentIds = new Set(
       allLinkedMovements.map((m) => m.pixInstallmentId).filter(Boolean) as string[]
     );
+    const coveredSettlementIds = new Set(
+      allLinkedMovements.map((m) => m.settlementId).filter(Boolean) as string[]
+    );
+    const coveredObligationIds = new Set(
+      allLinkedMovements.map((m) => m.obligationId).filter(Boolean) as string[]
+    );
 
     // 2. Include any paid Payments (without pixInstallments) and paid PixInstallments in [startDate, endDate]
-    // that were created directly in DB without a FinancialMovement row (zero double-counting)
-    const [paidSinglePayments, paidPixInstallments] = await Promise.all([
+    // as well as paid/settled Accounts Payable (zero double-counting)
+    const [paidSinglePayments, paidPixInstallments, paidPayableSettlements, paidDirectPayables] = await Promise.all([
       prisma.payment.findMany({
         where: {
           status: 'Pago',
@@ -908,6 +1024,31 @@ export class FinancialService {
           ],
         },
         select: { id: true, valor: true },
+      }),
+      ((prisma as any).financialSettlement?.findMany
+        ? (prisma as any).financialSettlement.findMany({
+            where: {
+              status: 'Ativo',
+              obligation: { tipo: 'PAYABLE' },
+              dataLiquidacao: { gte: startDate, lte: endDate },
+            },
+            include: {
+              obligation: { select: { id: true, categoria: true } },
+            },
+          })
+        : Promise.resolve([])),
+      prisma.financialObligation.findMany({
+        where: {
+          tipo: 'PAYABLE',
+          status: 'Pago',
+          settlements: { none: {} },
+          OR: [
+            { dataVencimento: { gte: startDate, lte: endDate } },
+            { updatedAt: { gte: startDate, lte: endDate } },
+            { createdAt: { gte: startDate, lte: endDate } },
+          ],
+        },
+        select: { id: true, valorOriginal: true, categoria: true },
       }),
     ]);
 
@@ -955,17 +1096,34 @@ export class FinancialService {
       }
     }
 
+    for (const set of paidPayableSettlements) {
+      if (!coveredSettlementIds.has(set.id)) {
+        addOutflow(set.obligation?.categoria || 'Insumos / Fornecedores', Number(set.valor));
+      }
+    }
+
+    for (const ob of paidDirectPayables) {
+      if (!coveredObligationIds.has(ob.id)) {
+        addOutflow(ob.categoria || 'Insumos / Fornecedores', Number(ob.valorOriginal));
+      }
+    }
+
     totalInflows = round2(totalInflows);
     totalOutflows = round2(totalOutflows);
     const netCashFlow = round2(totalInflows - totalOutflows);
 
     // 3. Compute Pending & Overdue Obligations (RECEIVABLE & PAYABLE)
-    const allOpenObligations = await prisma.financialObligation.findMany({
-      where: {
-        status: { notIn: ['Cancelado', 'Pago'] },
-      },
-      include: { settlements: true },
-    });
+    let allOpenObligations: any[] = [];
+    try {
+      allOpenObligations = await prisma.financialObligation.findMany({
+        where: {
+          status: { notIn: ['Cancelado', 'Pago'] },
+        },
+        include: { settlements: true },
+      });
+    } catch {
+      allOpenObligations = [];
+    }
 
     let pendingReceivables = 0;
     let overdueReceivables = 0;

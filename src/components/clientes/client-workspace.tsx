@@ -13,7 +13,8 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AppCombobox } from '@/components/ui/app-combobox';
+import { maskPhoneBR, unmaskPhoneBR } from '@/lib/masks';
 import {
   Calendar,
   Clock,
@@ -128,8 +129,9 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
   // Quick emergency contact addition
   async function handleAddEmergencyContact(e: React.FormEvent) {
     e.preventDefault();
-    if (!newContactNome.trim() || !newContactTelefone.trim() || !newContactParentesco.trim()) {
-      alert('Preencha nome, telefone e parentesco.');
+    const rawContactPhone = unmaskPhoneBR(newContactTelefone);
+    if (!newContactNome.trim() || rawContactPhone.length < 10 || !newContactParentesco.trim()) {
+      alert('Preencha nome, telefone válido com DDD e parentesco.');
       return;
     }
 
@@ -139,7 +141,7 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           nome: newContactNome.trim(),
-          telefone: newContactTelefone.trim(),
+          telefone: rawContactPhone,
           parentesco: newContactParentesco.trim(),
           observacoes: newContactObs.trim() || null,
           isActive: true,
@@ -487,7 +489,7 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
             <Card>
               <CardHeader className="pb-3 flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="text-base font-semibold">Contatos de Emergência (1:N)</CardTitle>
+                  <CardTitle className="text-base font-semibold">Contatos de Emergência</CardTitle>
                   <CardDescription>Pessoas autorizadas para comunicação emergencial</CardDescription>
                 </div>
                 <Button
@@ -512,9 +514,10 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
                         required
                       />
                       <Input
-                        placeholder="Telefone *"
+                        placeholder="(00) 00000-0000 *"
+                        inputMode="numeric"
                         value={newContactTelefone}
-                        onChange={(e) => setNewContactTelefone(e.target.value)}
+                        onChange={(e) => setNewContactTelefone(maskPhoneBR(e.target.value))}
                         className="h-8 text-xs"
                         required
                       />
@@ -567,7 +570,7 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
                               {contact.parentesco}
                             </Badge>
                           </div>
-                          <p className="text-muted-foreground font-mono">{contact.telefone}</p>
+                          <p className="text-muted-foreground text-xs">{contact.telefone}</p>
                           {contact.observacoes && (
                             <p className="text-[11px] text-muted-foreground italic">
                               Obs: {contact.observacoes}
@@ -770,7 +773,7 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
           <Card>
             <CardHeader>
               <CardTitle className="text-base font-semibold">
-                Produtos Utilizados & Rastreabilidade de Lotes (§14–§17, §44)
+                Produtos Utilizados & Rastreabilidade de Lotes
               </CardTitle>
               <CardDescription>
                 Rastreabilidade de cada unidade física aplicada, com número de lote e código serial individual.
@@ -843,7 +846,7 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
                   Unidades Reutilizáveis Vinculadas a este Paciente
                 </CardTitle>
                 <CardDescription>
-                  Unidades de estoque em regime de uso exclusivo deste paciente (V16 / V17).
+                  Unidades de estoque em regime de uso exclusivo deste paciente.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -1090,18 +1093,20 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
                     <Label htmlFor="anexo-categoria" className="text-xs">
                       Categoria do Documento
                     </Label>
-                    <Select value={uploadCategory} onValueChange={setUploadCategory}>
-                      <SelectTrigger id="anexo-categoria" className="h-9 text-xs">
-                        <SelectValue placeholder="Selecione categoria" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="termo_consentimento">Termo de Consentimento</SelectItem>
-                        <SelectItem value="exame">Exame Clínico / Laboratorial</SelectItem>
-                        <SelectItem value="foto_antes_depois">Foto Antes / Depois</SelectItem>
-                        <SelectItem value="documento_pessoal">Documento de Identificação</SelectItem>
-                        <SelectItem value="outro">Outro Documento</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <AppCombobox
+                      id="anexo-categoria"
+                      options={[
+                        { value: 'termo_consentimento', label: 'Termo de Consentimento' },
+                        { value: 'exame', label: 'Exame Clínico / Laboratorial' },
+                        { value: 'foto_antes_depois', label: 'Foto Antes / Depois' },
+                        { value: 'documento_pessoal', label: 'Documento de Identificação' },
+                        { value: 'outro', label: 'Outro Documento' },
+                      ]}
+                      value={uploadCategory}
+                      onChange={setUploadCategory}
+                      searchable={false}
+                      triggerClassName="h-9 text-xs"
+                    />
                   </div>
                 </div>
 

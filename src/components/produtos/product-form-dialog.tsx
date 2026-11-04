@@ -1,30 +1,30 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertCircle } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { AppCombobox } from '@/components/ui/app-combobox';
+import { Loader2, Package } from 'lucide-react';
 
 export interface ProductFormData {
   id?: string;
   nome: string;
   categoria?: string | null;
   marca?: string | null;
+  descricao?: string | null;
   unidade: string;
   trackingMode?: 'UNIT' | 'QUANTITY';
   estoqueMinimo?: number;
-  descricao?: string | null;
   isReusable: boolean;
   isActive: boolean;
 }
@@ -36,29 +36,33 @@ interface ProductFormDialogProps {
   onSuccess: () => void;
 }
 
-const COMMON_CATEGORIES = [
-  'Toxinas',
-  'Preenchedores',
-  'Bioestimuladores',
-  'Skinboosters',
-  'Fios de PDO',
-  'Anestésicos',
-  'Cosméticos & Home Care',
-  'Descartáveis & Insumos',
-  'Outros',
+const COMMON_UNITS = [
+  { value: 'un', label: 'Unidade (un)' },
+  { value: 'ml', label: 'Mililitro (ml)' },
+  { value: 'mg', label: 'Miligrama (mg)' },
+  { value: 'g', label: 'Grama (g)' },
+  { value: 'ampola', label: 'Ampola' },
+  { value: 'frasco', label: 'Frasco' },
+  { value: 'seringa', label: 'Seringa' },
+  { value: 'caixa', label: 'Caixa' },
+  { value: 'pacote', label: 'Pacote' },
+  { value: 'par', label: 'Par' },
 ];
 
-const COMMON_UNITS = [
-  'Frasco',
-  'Ampola',
-  'Seringa',
-  'Caixa',
-  'Unidade',
-  'Envelope',
-  'Pacote',
-  'ml',
-  'g',
-  'aplicacoes',
+const COMMON_CATEGORIES = [
+  { value: 'Toxina Botulínica', label: 'Toxina Botulínica' },
+  { value: 'Preenchedores', label: 'Preenchedores' },
+  { value: 'Bioestimuladores', label: 'Bioestimuladores' },
+  { value: 'Fios de Sustentação', label: 'Fios de Sustentação' },
+  { value: 'Dermocosméticos', label: 'Dermocosméticos' },
+  { value: 'Descartáveis', label: 'Descartáveis' },
+  { value: 'Anestésicos', label: 'Anestésicos' },
+  { value: 'Equipamentos / Ponteiras', label: 'Equipamentos / Ponteiras' },
+];
+
+const TRACKING_MODE_OPTIONS = [
+  { value: 'UNIT', label: 'Unidades Individuais / Seringas (UNIT)' },
+  { value: 'QUANTITY', label: 'Quantidade Fracionável / Volume (QUANTITY)' },
 ];
 
 export function ProductFormDialog({
@@ -72,71 +76,69 @@ export function ProductFormDialog({
   const [nome, setNome] = useState('');
   const [categoria, setCategoria] = useState('');
   const [marca, setMarca] = useState('');
-  const [unidade, setUnidade] = useState('Frasco');
+  const [descricao, setDescricao] = useState('');
+  const [unidade, setUnidade] = useState('un');
   const [trackingMode, setTrackingMode] = useState<'UNIT' | 'QUANTITY'>('UNIT');
   const [estoqueMinimo, setEstoqueMinimo] = useState('5');
-  const [descricao, setDescricao] = useState('');
   const [isReusable, setIsReusable] = useState(false);
-  const [isActive, setIsActive] = useState(true);
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (product) {
-      setNome(product.nome || '');
-      setCategoria(product.categoria || '');
-      setMarca(product.marca || '');
-      setUnidade(product.unidade || 'Frasco');
-      setTrackingMode(product.trackingMode || 'UNIT');
-      setEstoqueMinimo(String(product.estoqueMinimo ?? 5));
-      setDescricao(product.descricao || '');
-      setIsReusable(Boolean(product.isReusable));
-      setIsActive(product.isActive !== false);
-    } else {
-      setNome('');
-      setCategoria('Toxinas');
-      setMarca('');
-      setUnidade('Frasco');
-      setTrackingMode('UNIT');
-      setEstoqueMinimo('5');
-      setDescricao('');
-      setIsReusable(false);
-      setIsActive(true);
+    if (open) {
+      if (product) {
+        setNome(product.nome || '');
+        setCategoria(product.categoria || '');
+        setMarca(product.marca || '');
+        setDescricao(product.descricao || '');
+        setUnidade(product.unidade || 'un');
+        setTrackingMode(product.trackingMode || 'UNIT');
+        setEstoqueMinimo(String(product.estoqueMinimo ?? 5));
+        setIsReusable(Boolean(product.isReusable));
+      } else {
+        setNome('');
+        setCategoria('');
+        setMarca('');
+        setDescricao('');
+        setUnidade('un');
+        setTrackingMode('UNIT');
+        setEstoqueMinimo('5');
+        setIsReusable(false);
+      }
+      setError(null);
     }
-    setErrorMessage(null);
-  }, [product, open]);
+  }, [open, product]);
 
-  async function handleSubmit(e: React.FormEvent) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMessage(null);
+    setError(null);
 
-    if (!nome.trim() || nome.trim().length < 2) {
-      setErrorMessage('O nome do produto deve ter pelo menos 2 caracteres.');
+    if (!nome.trim()) {
+      setError('O nome do produto é obrigatório.');
       return;
     }
 
     if (!unidade.trim()) {
-      setErrorMessage('A unidade de medida é obrigatória.');
+      setError('A unidade de medida é obrigatória.');
       return;
     }
 
-    setIsSubmitting(true);
-
+    setLoading(true);
     try {
       const payload = {
         nome: nome.trim(),
         categoria: categoria.trim() || null,
         marca: marca.trim() || null,
+        descricao: descricao.trim() || null,
         unidade: unidade.trim(),
         trackingMode,
-        estoqueMinimo: Number(estoqueMinimo) || 0,
-        descricao: descricao.trim() || null,
+        estoqueMinimo: Math.max(0, Number(estoqueMinimo) || 0),
         isReusable,
-        isActive,
+        ...(isEditing && product ? { isActive: product.isActive } : { isActive: true }),
       };
 
-      const url = isEditing && product?.id ? `/api/products/${product.id}` : '/api/products';
+      const url = isEditing ? `/api/products/${product!.id}` : '/api/products';
       const method = isEditing ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
@@ -145,186 +147,161 @@ export function ProductFormDialog({
         body: JSON.stringify(payload),
       });
 
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || 'Erro ao salvar produto.');
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Erro ao salvar produto.');
       }
 
-      onOpenChange(false);
       onSuccess();
+      onOpenChange(false);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Erro ao processar produto.');
+      setError(err.message || 'Erro inesperado ao salvar produto.');
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="sm:max-w-[540px]">
         <DialogHeader>
-          <DialogTitle>{isEditing ? 'Editar Produto' : 'Novo Produto no Catálogo'}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <Package className="h-5 w-5 text-primary" />
+            {isEditing ? 'Editar Produto no Catálogo' : 'Novo Produto no Catálogo'}
+          </DialogTitle>
           <DialogDescription>
             {isEditing
-              ? 'Atualize a definição do produto e regras de rastreabilidade de estoque.'
-              : 'Cadastre um novo item no catálogo de produtos e insumos clínicos.'}
+              ? 'Atualize as informações técnicas do produto.'
+              : 'Cadastre um insumo ou produto clínico para controle de lotes e unidades em estoque.'}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 py-2">
-          {errorMessage && (
-            <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>{errorMessage}</span>
+          {error && (
+            <div className="rounded-md bg-destructive/10 border border-destructive/30 p-3 text-sm text-destructive">
+              {error}
             </div>
           )}
 
-          <div className="space-y-1">
-            <Label htmlFor="prod-nome">
-              Nome do Produto <span className="text-destructive">*</span>
-            </Label>
+          <div className="space-y-2">
+            <Label htmlFor="prod-nome">Nome do Produto *</Label>
             <Input
               id="prod-nome"
+              placeholder="Ex: Toxina Botulínica 100U, Ácido Hialurônico 1ml..."
               value={nome}
               onChange={(e) => setNome(e.target.value)}
-              placeholder="Ex: Botox 100U, Restylane Lyft, Creme Anestésico"
               required
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <Label htmlFor="prod-categoria">Categoria</Label>
-              <Input
-                id="prod-categoria"
-                value={categoria}
-                onChange={(e) => setCategoria(e.target.value)}
-                placeholder="Ex: Toxinas, Preenchedores"
-                list="category-suggestions"
-              />
-              <datalist id="category-suggestions">
-                {COMMON_CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat} />
-                ))}
-              </datalist>
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="prod-marca">Marca / Laboratório</Label>
+            <div className="space-y-2">
+              <Label htmlFor="prod-marca">Marca / Fabricante</Label>
               <Input
                 id="prod-marca"
+                placeholder="Ex: Allergan, Galderma, Merz..."
                 value={marca}
                 onChange={(e) => setMarca(e.target.value)}
-                placeholder="Ex: Allergan, Galderma"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="prod-categoria">Categoria</Label>
+              <AppCombobox
+                id="prod-categoria"
+                options={COMMON_CATEGORIES}
+                value={categoria}
+                onChange={setCategoria}
+                placeholder="Selecione ou digite..."
+                searchPlaceholder="Buscar ou criar categoria..."
+                creatable
+                clearable
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="space-y-1">
-              <Label>Modo de Rastreio</Label>
-              <Select
-                value={trackingMode}
-                onValueChange={(v) => setTrackingMode(v as 'UNIT' | 'QUANTITY')}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="UNIT">Unidade Física (Serial)</SelectItem>
-                  <SelectItem value="QUANTITY">Quantidade Fracionável</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="prod-unidade">
-                Unidade <span className="text-destructive">*</span>
-              </Label>
-              <Input
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="prod-unidade">Unidade de Medida *</Label>
+              <AppCombobox
                 id="prod-unidade"
+                options={COMMON_UNITS}
                 value={unidade}
-                onChange={(e) => setUnidade(e.target.value)}
-                placeholder="Ex: Frasco, ml, g"
-                list="unit-suggestions"
-                required
+                onChange={setUnidade}
+                placeholder="Ex: un, ml, ampola, frasco..."
+                searchPlaceholder="Buscar ou criar unidade..."
+                creatable
               />
-              <datalist id="unit-suggestions">
-                {COMMON_UNITS.map((u) => (
-                  <option key={u} value={u} />
-                ))}
-              </datalist>
             </div>
 
-            <div className="space-y-1">
-              <Label htmlFor="prod-min">Estoque Mín.</Label>
+            <div className="space-y-2">
+              <Label htmlFor="prod-tracking">Modo de Rastreio *</Label>
+              <AppCombobox
+                id="prod-tracking"
+                options={TRACKING_MODE_OPTIONS}
+                value={trackingMode}
+                onChange={(val) => setTrackingMode(val as 'UNIT' | 'QUANTITY')}
+                placeholder="Selecione o modo de rastreio"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="prod-estoque-min">Estoque Mínimo (Alerta)</Label>
               <Input
-                id="prod-min"
+                id="prod-estoque-min"
                 type="number"
-                step="0.1"
                 min="0"
+                step={trackingMode === 'QUANTITY' ? '0.1' : '1'}
                 value={estoqueMinimo}
                 onChange={(e) => setEstoqueMinimo(e.target.value)}
               />
             </div>
-          </div>
 
-          <div className="space-y-1">
-            <Label>Classificação de Reuso (§15)</Label>
-            <div className="pt-1">
-              <Button
-                type="button"
-                variant={isReusable ? 'default' : 'outline'}
-                size="sm"
-                className="w-full text-xs"
-                onClick={() => setIsReusable(!isReusable)}
-              >
-                {isReusable ? 'Reutilizável (Mesmo Cliente)' : 'Uso Único / Consumível'}
-              </Button>
+            <div className="space-y-2 flex flex-col justify-end pb-1">
+              <div className="flex items-start space-x-2 rounded-md border p-3 bg-muted/30">
+                <Checkbox
+                  id="prod-reusable"
+                  checked={isReusable}
+                  onCheckedChange={(checked) => setIsReusable(Boolean(checked))}
+                />
+                <div className="grid gap-1 leading-none">
+                  <Label htmlFor="prod-reusable" className="cursor-pointer font-medium text-sm">
+                    Produto Reutilizável / Multidose
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Permite múltiplos usos antes de esgotar
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="p-3 border rounded-lg bg-muted/20 text-xs text-muted-foreground">
-            {trackingMode === 'QUANTITY' ? (
-              <p>
-                <strong>Consumo Parcial / Quantitativo:</strong> O saldo do lote é controlado em{' '}
-                <strong>{unidade || 'unidades'}</strong>, permitindo consumo parcial/fracionado em múltiplos atendimentos até esgotamento.
-              </p>
-            ) : isReusable ? (
-              <p>
-                <strong>Regra de Reutilização:</strong> Cada frasco ou unidade física terá código serial
-                individual e, após a primeira aplicação, ficará vinculado exclusivamente àquele paciente (V16).
-              </p>
-            ) : (
-              <p>
-                <strong>Uso Único:</strong> Unidades físicas são consumidas e esgotadas no atendimento,
-                impedindo reutilização cruzada (V17 / V18).
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-1">
-            <Label htmlFor="prod-descricao">Descrição / Observações</Label>
-            <Textarea
+          <div className="space-y-2">
+            <Label htmlFor="prod-descricao">Descrição / Especificações</Label>
+            <textarea
               id="prod-descricao"
+              rows={2}
+              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              placeholder="Observações de armazenamento, diluição padrão ou especificações..."
               value={descricao}
               onChange={(e) => setDescricao(e.target.value)}
-              placeholder="Instruções de armazenamento, concentração, etc."
-              rows={2}
             />
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0 pt-2">
+          <DialogFooter className="pt-2">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={isSubmitting}
+              disabled={loading}
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Salvando...' : isEditing ? 'Salvar Alterações' : 'Cadastrar Produto'}
+            <Button type="submit" disabled={loading}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isEditing ? 'Salvar Alterações' : 'Cadastrar Produto'}
             </Button>
           </DialogFooter>
         </form>

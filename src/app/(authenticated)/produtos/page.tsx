@@ -1,475 +1,776 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { PageHeader } from '@/components/shared/page-header';
-import { StatusBadge } from '@/components/shared/status-badge';
-import { SearchInput } from '@/components/shared/search-input';
-import { EmptyState } from '@/components/shared/empty-state';
-import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Plus,
   Package,
-  PackagePlus,
+  Plus,
   Layers,
   AlertTriangle,
-  Pencil,
-  Power,
-  ShieldCheck,
+  RefreshCw,
+  Edit,
+  Eye,
+  Repeat,
   Tag,
-  AlertCircle,
+  CheckCircle2,
   Clock,
-  User,
+  XCircle,
+  Trash2,
 } from 'lucide-react';
-import { formatDate } from '@/lib/format';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AppCombobox } from '@/components/ui/app-combobox';
+import { ListingToolbar } from '@/components/shared/listing-toolbar';
+import { RowStatusToggle } from '@/components/shared/row-status-toggle';
+import { useDebounce } from '@/hooks/use-debounce';
 import { ProductFormDialog, ProductFormData } from '@/components/produtos/product-form-dialog';
-import { LotIntakeDialog, ProductSimpleItem } from '@/components/produtos/lot-intake-dialog';
+import { LotIntakeDialog } from '@/components/produtos/lot-intake-dialog';
+import { ProductDetailSheet } from '@/components/produtos/product-detail-sheet';
+import { UnitActionDialog } from '@/components/produtos/unit-action-dialog';
+import { ProductSummaryDto, StockUnitItemDto, StockUnitStatus } from '@/types/product';
 
-interface ProductItem {
-  id: string;
-  nome: string;
-  categoria: string | null;
-  marca: string | null;
-  descricao: string | null;
-  unidade: string;
-  isReusable: boolean;
-  isActive: boolean;
-  lotsCount: number;
-  totalUnitsCount: number;
-  availableUnitsCount: number;
-  isLowStock: boolean;
-  createdAt: string;
-}
+export default function ProdutosEstoquePage() {
+  const [activeTab, setActiveTab] = useState<'catalogo' | 'unidades'>('catalogo');
 
-interface StockUnitItem {
-  id: string;
-  codigoSerial: string;
-  productId: string;
-  productName: string;
-  unidade: string;
-  isReusable: boolean;
-  lotId: string;
-  numeroLote: string;
-  dataValidade: string | null;
-  status: 'Disponivel' | 'EmUso' | 'Esgotado' | 'Descartado';
-  currentClientId?: string | null;
-  currentClientName?: string | null;
-  isAssignedToCurrentClient?: boolean;
-}
+  // Products catalog state
+  const [products, setProducts] = useState<ProductSummaryDto[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 350);
+  const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
+  const [activeFilter, setActiveFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
 
-export default function ProdutosPage() {
-  const [activeMainTab, setActiveMainTab] = useState<'catalogo' | 'unidades'>('catalogo');
-  const [products, setProducts] = useState<ProductItem[]>([]);
-  const [stockUnits, setStockUnits] = useState<StockUnitItem[]>([]);
+  // Global stock units state
+  const [units, setUnits] = useState<StockUnitItemDto[]>([]);
+  const [loadingUnits, setLoadingUnits] = useState(false);
+  const [unitSearch, setUnitSearch] = useState('');
+  const debouncedUnitSearch = useDebounce(unitSearch, 350);
+  const [unitStatusFilter, setUnitStatusFilter] = useState<string>('ALL');
+  const [unitProductFilter, setUnitProductFilter] = useState<string>('ALL');
 
-  // Search & Filter state
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('Todos');
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Dialogs & Sheets state
+  const [productDialogOpen, setProductDialogOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<ProductFormData | null>(null);
 
-  // Dialog states
-  const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
-  const [selectedProductForEdit, setSelectedProductForEdit] = useState<ProductFormData | null>(null);
+  const [lotDialogOpen, setLotDialogOpen] = useState(false);
+  const [preselectedProductForLot, setPreselectedProductForLot] = useState<string | null>(null);
 
-  const [isLotDialogOpen, setIsLotDialogOpen] = useState(false);
-  const [lotPreselectedProductId, setLotPreselectedProductId] = useState<string | null>(null);
+  const [detailSheetOpen, setDetailSheetOpen] = useState(false);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+
+  const [unitActionOpen, setUnitActionOpen] = useState(false);
+  const [selectedUnitForAction, setSelectedUnitForAction] = useState<StockUnitItemDto | null>(null);
 
   const fetchProducts = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+    setLoadingProducts(true);
     try {
       const params = new URLSearchParams();
-      if (searchTerm.trim()) {
-        params.set('search', searchTerm.trim());
-      }
-      if (selectedCategory !== 'Todos') {
-        params.set('categoria', selectedCategory);
-      }
+      if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
+      if (categoryFilter !== 'ALL') params.set('categoria', categoryFilter);
+      if (activeFilter === 'ACTIVE') params.set('active', 'true');
+      if (activeFilter === 'INACTIVE') params.set('active', 'false');
 
       const res = await fetch(`/api/products?${params.toString()}`);
       const json = await res.json();
-
       if (!res.ok || !json.success) {
-        throw new Error(json.error || 'Falha ao buscar produtos');
+        throw new Error(json.error || 'Erro ao buscar produtos');
       }
-
-      setProducts(json.data || []);
-    } catch (err: any) {
+      setProducts(json.data || json.items || []);
+    } catch (err) {
       console.error('Erro ao buscar produtos:', err);
-      setError(err.message || 'Erro ao consultar catálogo de produtos.');
     } finally {
-      setIsLoading(false);
+      setLoadingProducts(false);
     }
-  }, [searchTerm, selectedCategory]);
+  }, [debouncedSearch, categoryFilter, activeFilter]);
 
-  const fetchStockUnits = useCallback(async () => {
+  const fetchUnits = useCallback(async () => {
+    setLoadingUnits(true);
     try {
       const params = new URLSearchParams();
-      if (searchTerm.trim()) {
-        params.set('search', searchTerm.trim());
-      }
+      if (debouncedUnitSearch.trim()) params.set('search', debouncedUnitSearch.trim());
+      if (unitStatusFilter !== 'ALL') params.set('status', unitStatusFilter);
+      if (unitProductFilter !== 'ALL') params.set('productId', unitProductFilter);
+
       const res = await fetch(`/api/stock/units?${params.toString()}`);
       const json = await res.json();
-      if (res.ok && json.success) {
-        setStockUnits(json.data || []);
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Erro ao buscar unidades');
       }
+      setUnits(json.data || []);
     } catch (err) {
       console.error('Erro ao buscar unidades de estoque:', err);
+    } finally {
+      setLoadingUnits(false);
     }
-  }, [searchTerm]);
+  }, [debouncedUnitSearch, unitStatusFilter, unitProductFilter]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchProducts();
-      fetchStockUnits();
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [fetchProducts, fetchStockUnits]);
+    fetchProducts();
+  }, [fetchProducts]);
 
-  // Categories list derived from current products
-  const categories = [
-    'Todos',
-    ...Array.from(new Set(products.map((p) => p.categoria).filter(Boolean) as string[])),
+  useEffect(() => {
+    if (activeTab === 'unidades') {
+      fetchUnits();
+    }
+  }, [activeTab, fetchUnits]);
+
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    products.forEach((p) => {
+      if (p.categoria) set.add(p.categoria);
+    });
+    return Array.from(set).sort();
+  }, [products]);
+
+  const categoryFilterOptions = useMemo(
+    () => [
+      { value: 'ALL', label: 'Todas as Categorias' },
+      ...categories.map((cat) => ({ value: cat, label: cat })),
+    ],
+    [categories]
+  );
+
+  const statusFilterOptions = [
+    { value: 'ALL', label: 'Todos os Status' },
+    { value: 'ACTIVE', label: 'Somente Ativos' },
+    { value: 'INACTIVE', label: 'Somente Inativos' },
   ];
 
-  const lowStockCount = products.filter((p) => p.isLowStock && p.isActive).length;
+  const unitProductOptions = useMemo(
+    () => [
+      { value: 'ALL', label: 'Todos os Produtos' },
+      ...products.map((p) => ({
+        value: p.id,
+        label: `${p.nome}${p.marca ? ` (${p.marca})` : ''}`,
+      })),
+    ],
+    [products]
+  );
 
-  function handleOpenCreateProduct() {
-    setSelectedProductForEdit(null);
-    setIsProductDialogOpen(true);
-  }
+  const unitStatusOptions = [
+    { value: 'ALL', label: 'Todos os Status' },
+    { value: 'Disponivel', label: 'Disponível' },
+    { value: 'EmUso', label: 'Em Uso (Aberto)' },
+    { value: 'Esgotado', label: 'Esgotado' },
+    { value: 'Descartado', label: 'Descartado' },
+  ];
 
-  function handleOpenEditProduct(product: ProductItem) {
-    setSelectedProductForEdit({
-      id: product.id,
-      nome: product.nome,
-      categoria: product.categoria,
-      marca: product.marca,
-      unidade: product.unidade,
-      descricao: product.descricao,
-      isReusable: product.isReusable,
-      isActive: product.isActive,
+  const summaryMetrics = useMemo(() => {
+    const activeProducts = products.filter((p) => p.isActive);
+    const totalAvailableUnits = activeProducts.reduce(
+      (acc, p) => acc + p.availableUnitsCount,
+      0
+    );
+    const lowStockProducts = activeProducts.filter((p) => p.isLowStock).length;
+    const totalLots = activeProducts.reduce((acc, p) => acc + p.lotsCount, 0);
+
+    return {
+      activeCount: activeProducts.length,
+      totalAvailableUnits,
+      lowStockProducts,
+      totalLots,
+    };
+  }, [products]);
+
+  const handleOpenNewProduct = () => {
+    setEditingProduct(null);
+    setProductDialogOpen(true);
+  };
+
+  const handleOpenEditProduct = (prod: ProductSummaryDto) => {
+    setEditingProduct({
+      id: prod.id,
+      nome: prod.nome,
+      categoria: prod.categoria,
+      marca: prod.marca,
+      descricao: prod.descricao,
+      unidade: prod.unidade,
+      trackingMode: prod.trackingMode,
+      estoqueMinimo: prod.estoqueMinimo,
+      isReusable: prod.isReusable,
+      isActive: prod.isActive,
     });
-    setIsProductDialogOpen(true);
-  }
+    setProductDialogOpen(true);
+  };
 
-  function handleOpenLotIntake(productId?: string) {
-    setLotPreselectedProductId(productId || null);
-    setIsLotDialogOpen(true);
-  }
+  const handleToggleProductStatus = async (prod: ProductSummaryDto, nextActive: boolean) => {
+    const res = await fetch(`/api/products/${prod.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isActive: nextActive }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      throw new Error(json.error || 'Falha ao atualizar status do produto');
+    }
+    setProducts((prev) =>
+      prev.map((item) => (item.id === prod.id ? { ...item, isActive: nextActive } : item))
+    );
+  };
 
-  const simpleProductsList: ProductSimpleItem[] = products.map((p) => ({
-    id: p.id,
-    nome: p.nome,
-    marca: p.marca,
-    unidade: p.unidade,
-    isReusable: p.isReusable,
-  }));
+  const handleOpenNewLot = (productId?: string) => {
+    setPreselectedProductForLot(productId || null);
+    setLotDialogOpen(true);
+  };
+
+  const handleOpenDetails = (productId: string) => {
+    setSelectedProductId(productId);
+    setDetailSheetOpen(true);
+  };
+
+  const handleOpenUnitAction = (unit: StockUnitItemDto) => {
+    setSelectedUnitForAction(unit);
+    setUnitActionOpen(true);
+  };
+
+  const handleRefreshAll = () => {
+    fetchProducts();
+    if (activeTab === 'unidades') fetchUnits();
+  };
+
+  const getStatusBadge = (status: StockUnitStatus) => {
+    switch (status) {
+      case 'Disponivel':
+        return (
+          <Badge variant="success" className="gap-1">
+            <CheckCircle2 className="h-3 w-3" /> Disponível
+          </Badge>
+        );
+      case 'EmUso':
+        return (
+          <Badge variant="warning" className="gap-1">
+            <Clock className="h-3 w-3" /> Em Uso
+          </Badge>
+        );
+      case 'Esgotado':
+        return (
+          <Badge variant="secondary" className="gap-1">
+            <XCircle className="h-3 w-3" /> Esgotado
+          </Badge>
+        );
+      case 'Descartado':
+        return (
+          <Badge variant="destructive" className="gap-1">
+            <Trash2 className="h-3 w-3" /> Descartado
+          </Badge>
+        );
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Produtos & Estoque"
-        description="Catálogo de insumos, classificação de reuso, controle de lotes e rastreabilidade serial física."
-      >
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => handleOpenLotIntake()}>
-            <PackagePlus className="mr-2 h-4 w-4 text-primary" />
-            Entrada de Lote
-          </Button>
-          <Button onClick={handleOpenCreateProduct}>
-            <Plus className="mr-2 h-4 w-4" />
-            Novo Produto
-          </Button>
+      {/* Page Title */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Package className="h-6 w-6 text-primary" />
+            Produtos & Controle de Estoque
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Gerencie o catálogo de insumos clínicos, entrada de lotes e rastreabilidade individual por unidade física ou volume.
+          </p>
         </div>
-      </PageHeader>
+      </div>
 
-      {/* Low stock alert badge if any */}
-      {lowStockCount > 0 && (
-        <div className="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-700 dark:text-amber-400 text-sm">
-          <AlertTriangle className="h-5 w-5 shrink-0" />
-          <span>
-            Atenção: <strong>{lowStockCount} produto(s)</strong> estão com estoque baixo (5 ou menos
-            unidades disponíveis). Realize entrada de lotes para reposição.
-          </span>
-        </div>
-      )}
+      {/* KPI Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription className="text-xs font-medium uppercase tracking-wider">
+              Produtos Ativos
+            </CardDescription>
+            <CardTitle className="text-2xl font-bold">
+              {summaryMetrics.activeCount}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">
+              Itens cadastrados no catálogo clínico
+            </p>
+          </CardContent>
+        </Card>
 
-      {/* Main Tabs: Catálogo vs Unidades Rastreáveis */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription className="text-xs font-medium uppercase tracking-wider">
+              Unidades Disponíveis
+            </CardDescription>
+            <CardTitle className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+              {summaryMetrics.totalAvailableUnits}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">
+              Prontas para consumo em atendimentos
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription className="text-xs font-medium uppercase tracking-wider">
+              Alertas de Estoque Baixo
+            </CardDescription>
+            <CardTitle
+              className={`text-2xl font-bold flex items-center gap-2 ${
+                summaryMetrics.lowStockProducts > 0
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-foreground'
+              }`}
+            >
+              {summaryMetrics.lowStockProducts}
+              {summaryMetrics.lowStockProducts > 0 && (
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">
+              Produtos abaixo do estoque mínimo configurado
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription className="text-xs font-medium uppercase tracking-wider">
+              Lotes Registrados
+            </CardDescription>
+            <CardTitle className="text-2xl font-bold">
+              {summaryMetrics.totalLots}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">
+              Histórico de entradas e validades
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Tabs: Catalog vs Physical Stock Units */}
       <Tabs
-        value={activeMainTab}
-        onValueChange={(v) => setActiveMainTab(v as any)}
-        className="w-full space-y-4"
+        value={activeTab}
+        onValueChange={(v) => setActiveTab(v as 'catalogo' | 'unidades')}
+        className="space-y-4"
       >
-        <div className="flex flex-col sm:flex-row gap-4 justify-between items-stretch sm:items-center">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <TabsList>
-            <TabsTrigger value="catalogo">
-              <Package className="mr-2 h-4 w-4" />
+            <TabsTrigger value="catalogo" className="gap-1.5">
+              <Package className="h-4 w-4" />
               Catálogo de Produtos ({products.length})
             </TabsTrigger>
-            <TabsTrigger value="unidades">
-              <Layers className="mr-2 h-4 w-4" />
-              Unidades Físicas Rastreáveis ({stockUnits.length})
+            <TabsTrigger value="unidades" className="gap-1.5">
+              <Tag className="h-4 w-4" />
+              Unidades Físicas em Estoque
             </TabsTrigger>
           </TabsList>
-
-          <div className="w-full sm:max-w-xs">
-            <SearchInput
-              value={searchTerm}
-              onChange={setSearchTerm}
-              placeholder="Buscar por nome, marca ou serial..."
-            />
-          </div>
         </div>
 
-        {error && (
-          <div className="flex items-center gap-2 p-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md">
-            <AlertCircle className="h-5 w-5 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        {/* TAB 1: Catálogo de Produtos */}
+        {/* TAB 1: CATÁLOGO DE PRODUTOS */}
         <TabsContent value="catalogo" className="space-y-4">
-          {/* Categories Filter Badges */}
-          {categories.length > 1 && (
-            <div className="flex flex-wrap gap-1.5 items-center">
-              <span className="text-xs text-muted-foreground mr-1">Categoria:</span>
-              {categories.map((cat) => (
-                <Badge
-                  key={cat}
-                  variant={selectedCategory === cat ? 'default' : 'outline'}
-                  className="cursor-pointer text-xs"
-                  onClick={() => setSelectedCategory(cat)}
+          <ListingToolbar
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Buscar por nome, marca ou descrição..."
+            rightSlot={
+              <>
+                <div className="w-48">
+                  <AppCombobox
+                    options={categoryFilterOptions}
+                    value={categoryFilter}
+                    onChange={setCategoryFilter}
+                    placeholder="Categoria"
+                  />
+                </div>
+                <div className="w-44">
+                  <AppCombobox
+                    options={statusFilterOptions}
+                    value={activeFilter}
+                    onChange={(val) =>
+                      setActiveFilter(val as 'ALL' | 'ACTIVE' | 'INACTIVE')
+                    }
+                    placeholder="Status"
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={fetchProducts}
+                  title="Atualizar lista"
                 >
-                  {cat}
-                </Badge>
-              ))}
-            </div>
-          )}
+                  <RefreshCw
+                    className={`h-4 w-4 ${loadingProducts ? 'animate-spin' : ''}`}
+                  />
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => handleOpenNewLot()}
+                  className="gap-1.5"
+                >
+                  <Layers className="h-4 w-4" />
+                  Entrada de Lote
+                </Button>
+                <Button onClick={handleOpenNewProduct} className="gap-1.5">
+                  <Plus className="h-4 w-4" />
+                  Novo Produto
+                </Button>
+              </>
+            }
+          />
 
-          {isLoading ? (
-            <div className="p-12 text-center text-muted-foreground flex flex-col items-center gap-2">
-              <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-              <span>Carregando catálogo de produtos...</span>
-            </div>
-          ) : products.length === 0 ? (
-            <EmptyState
-              icon={Package}
-              title="Nenhum produto cadastrado"
-              description={
-                searchTerm || selectedCategory !== 'Todos'
-                  ? 'Nenhum item corresponde aos filtros selecionados.'
-                  : 'Seu catálogo de produtos está vazio. Cadastre o primeiro produto para iniciar o controle de estoque.'
-              }
-              actionLabel="Cadastrar Primeiro Produto"
-              onAction={handleOpenCreateProduct}
-            />
-          ) : (
-            <div className="rounded-md border bg-card overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Produto / Marca</TableHead>
-                    <TableHead>Categoria</TableHead>
-                    <TableHead>Classificação</TableHead>
-                    <TableHead>Lotes</TableHead>
-                    <TableHead>Estoque Disponível</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {products.map((produto) => (
-                    <TableRow key={produto.id} className="hover:bg-muted/50">
-                      <TableCell>
-                        <div className="font-semibold text-foreground">{produto.nome}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {produto.marca ? `Marca: ${produto.marca} • ` : ''}
-                          Unidade: {produto.unidade}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {produto.categoria || 'Geral'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={produto.isReusable ? 'default' : 'secondary'}
-                          className="text-xs"
-                        >
-                          {produto.isReusable ? 'Reutilizável (Mesmo Paciente)' : 'Uso Único'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {produto.lotsCount} lote(s)
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`font-bold ${
-                              produto.isLowStock
-                                ? 'text-amber-600 dark:text-amber-400'
-                                : 'text-foreground'
-                            }`}
-                          >
-                            {produto.availableUnitsCount} {produto.unidade}(s)
-                          </span>
-                          {produto.isLowStock && (
-                            <Badge variant="destructive" className="text-[10px] uppercase px-1.5 py-0">
-                              Baixo
-                            </Badge>
-                          )}
-                        </div>
-                        <span className="text-[11px] text-muted-foreground">
-                          Total gerado: {produto.totalUnitsCount}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={produto.isActive ? 'ativo' : 'inativo'} />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 text-xs px-2"
-                            onClick={() => handleOpenLotIntake(produto.id)}
-                            title="Dar entrada em novo lote deste produto"
-                          >
-                            <PackagePlus className="h-3.5 w-3.5 mr-1" />
-                            + Lote
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => handleOpenEditProduct(produto)}
-                            title="Editar produto"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </TableCell>
+          <Card>
+            <CardContent className="p-0">
+              {loadingProducts ? (
+                <div className="py-12 text-center text-sm text-muted-foreground">
+                  Carregando catálogo de produtos...
+                </div>
+              ) : products.length === 0 ? (
+                <div className="py-12 text-center space-y-3">
+                  <Package className="h-10 w-10 text-muted-foreground mx-auto opacity-40" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Nenhum produto encontrado</p>
+                    <p className="text-xs text-muted-foreground">
+                      Cadastre seu primeiro produto clínico para iniciar o controle de lotes e unidades.
+                    </p>
+                  </div>
+                  <Button size="sm" onClick={handleOpenNewProduct}>
+                    <Plus className="h-4 w-4 mr-1.5" />
+                    Cadastrar Produto
+                  </Button>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Produto / Marca</TableHead>
+                      <TableHead>Categoria</TableHead>
+                      <TableHead>Tipo de Uso</TableHead>
+                      <TableHead className="text-center">Lotes</TableHead>
+                      <TableHead className="text-center">Disponíveis / Total</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+                  </TableHeader>
+                  <TableBody>
+                    {products.map((prod) => (
+                      <TableRow
+                        key={prod.id}
+                        className={`cursor-pointer ${!prod.isActive ? 'opacity-65' : ''}`}
+                        onClick={() => handleOpenDetails(prod.id)}
+                      >
+                        <TableCell>
+                          <div className="font-medium text-foreground">{prod.nome}</div>
+                          <div className="text-xs text-muted-foreground flex items-center gap-2">
+                            <span>{prod.marca || 'Sem marca informada'}</span>
+                            <span>•</span>
+                            <span>Unid: {prod.unidade}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {prod.categoria ? (
+                            <Badge variant="outline">{prod.categoria}</Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1 items-start">
+                            {prod.trackingMode === 'QUANTITY' ? (
+                              <Badge variant="secondary" className="text-[10px]">
+                                Rastreio: Quantidade ({prod.unidade})
+                              </Badge>
+                            ) : prod.isReusable ? (
+                              <Badge variant="info" className="gap-1">
+                                <Repeat className="h-3 w-3" /> Reutilizável
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary">Uso Único</Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center font-medium">
+                          {prod.lotsCount}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="inline-flex items-center gap-1.5">
+                            {prod.trackingMode === 'QUANTITY' ? (
+                              <span
+                                className={`font-bold text-sm ${
+                                  prod.totalQuantityAvailable === 0
+                                    ? 'text-destructive'
+                                    : prod.isLowStock
+                                    ? 'text-amber-600 dark:text-amber-400'
+                                    : 'text-emerald-600 dark:text-emerald-400'
+                                }`}
+                              >
+                                {prod.totalQuantityAvailable} {prod.unidade}
+                              </span>
+                            ) : (
+                              <>
+                                <span
+                                  className={`font-bold text-sm ${
+                                    prod.availableUnitsCount === 0
+                                      ? 'text-destructive'
+                                      : prod.isLowStock
+                                      ? 'text-amber-600 dark:text-amber-400'
+                                      : 'text-emerald-600 dark:text-emerald-400'
+                                  }`}
+                                >
+                                  {prod.availableUnitsCount}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  / {prod.totalUnitsCount} {prod.unidade}
+                                </span>
+                              </>
+                            )}
+                            {prod.isActive && prod.isLowStock && (
+                              <Badge
+                                variant={
+                                  (prod.trackingMode === 'QUANTITY'
+                                    ? prod.totalQuantityAvailable
+                                    : prod.availableUnitsCount) === 0
+                                    ? 'destructive'
+                                    : 'warning'
+                                }
+                                className="ml-1 text-[10px] px-1.5 py-0"
+                              >
+                                {(prod.trackingMode === 'QUANTITY'
+                                  ? prod.totalQuantityAvailable
+                                  : prod.availableUnitsCount) === 0
+                                  ? 'Sem estoque'
+                                  : 'Baixo'}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <RowStatusToggle
+                            isActive={prod.isActive}
+                            onToggle={(nextState) =>
+                              handleToggleProductStatus(prod, nextState)
+                            }
+                          />
+                        </TableCell>
+                        <TableCell
+                          className="text-right"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              title="Registrar novo lote"
+                              onClick={() => handleOpenNewLot(prod.id)}
+                            >
+                              <Layers className="h-4 w-4 mr-1 text-primary" />
+                              <span className="hidden md:inline text-xs">+ Lote</span>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Editar produto"
+                              onClick={() => handleOpenEditProduct(prod)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Ver lotes e unidades"
+                              onClick={() => handleOpenDetails(prod.id)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        {/* TAB 2: Unidades Físicas Rastreáveis (StockUnits) */}
+        {/* TAB 2: UNIDADES FÍSICAS EM ESTOQUE */}
         <TabsContent value="unidades" className="space-y-4">
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-xs text-muted-foreground pb-2">
-                Lista de unidades físicas rastreáveis em estoque. Cada frasco ou ampola possui um código
-                serial único gerado na entrada do lote (§14–§17, §44).
-              </div>
-
-              {stockUnits.length === 0 ? (
-                <EmptyState
-                  icon={Layers}
-                  title="Nenhuma unidade física registrada"
-                  description="Realize a entrada de lotes nos produtos cadastrados para gerar os códigos seriais físicos das unidades."
-                  actionLabel="Registrar Primeira Entrada de Lote"
-                  onAction={() => handleOpenLotIntake()}
-                />
-              ) : (
-                <div className="rounded-md border overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Código Serial</TableHead>
-                        <TableHead>Produto</TableHead>
-                        <TableHead>Lote</TableHead>
-                        <TableHead>Validade</TableHead>
-                        <TableHead>Regime</TableHead>
-                        <TableHead>Vinculação ao Paciente</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {stockUnits.map((unit) => {
-                        const isExpired =
-                          unit.dataValidade && new Date(unit.dataValidade) < new Date();
-
-                        return (
-                          <TableRow key={unit.id} className="hover:bg-muted/50">
-                            <TableCell className="font-mono font-bold text-primary">
-                              {unit.codigoSerial}
-                            </TableCell>
-                            <TableCell className="font-semibold">{unit.productName}</TableCell>
-                            <TableCell className="font-mono text-xs">{unit.numeroLote}</TableCell>
-                            <TableCell className="text-xs">
-                              {unit.dataValidade ? (
-                                <span className={isExpired ? 'text-destructive font-semibold' : ''}>
-                                  {formatDate(new Date(unit.dataValidade))}
-                                  {isExpired && ' (Vencido)'}
-                                </span>
-                              ) : (
-                                '-'
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <Badge
-                                variant={unit.isReusable ? 'default' : 'outline'}
-                                className="text-xs"
-                              >
-                                {unit.isReusable ? 'Reutilizável' : 'Uso Único'}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-xs">
-                              {unit.currentClientName ? (
-                                <div className="flex items-center gap-1.5 text-primary font-medium">
-                                  <User className="h-3.5 w-3.5 shrink-0" />
-                                  <span>{unit.currentClientName}</span>
-                                </div>
-                              ) : (
-                                <span className="text-muted-foreground italic">Disponível geral</span>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <StatusBadge status={unit.status} />
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
+          <ListingToolbar
+            searchValue={unitSearch}
+            onSearchChange={setUnitSearch}
+            searchPlaceholder="Buscar por código serial (ex: LOTE-001) ou produto..."
+            rightSlot={
+              <>
+                <div className="w-56">
+                  <AppCombobox
+                    options={unitProductOptions}
+                    value={unitProductFilter}
+                    onChange={setUnitProductFilter}
+                    placeholder="Produto"
+                    searchable
+                  />
                 </div>
+                <div className="w-48">
+                  <AppCombobox
+                    options={unitStatusOptions}
+                    value={unitStatusFilter}
+                    onChange={setUnitStatusFilter}
+                    placeholder="Status da Unidade"
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={fetchUnits}
+                  title="Atualizar unidades"
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 ${loadingUnits ? 'animate-spin' : ''}`}
+                  />
+                </Button>
+                <Button onClick={() => handleOpenNewLot()} className="gap-1.5">
+                  <Layers className="h-4 w-4" />
+                  Entrada de Lote
+                </Button>
+              </>
+            }
+          />
+
+          <Card>
+            <CardContent className="p-0">
+              {loadingUnits ? (
+                <div className="py-12 text-center text-sm text-muted-foreground">
+                  Carregando unidades físicas em estoque...
+                </div>
+              ) : units.length === 0 ? (
+                <div className="py-12 text-center space-y-2">
+                  <Tag className="h-10 w-10 text-muted-foreground mx-auto opacity-40" />
+                  <p className="text-sm font-medium">Nenhuma unidade física encontrada</p>
+                  <p className="text-xs text-muted-foreground">
+                    Registre um lote de entrada para gerar unidades numeradas automaticamente.
+                  </p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Código Serial</TableHead>
+                      <TableHead>Produto</TableHead>
+                      <TableHead>Lote / Validade</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-center">Usos Registrados</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {units.map((u) => {
+                      const isExpired =
+                        u.dataValidade !== null && new Date(u.dataValidade) < new Date();
+                      return (
+                        <TableRow key={u.id}>
+                          <TableCell className="font-mono text-xs font-semibold">
+                            {u.codigoSerial}
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-medium text-sm">{u.productName}</div>
+                            <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+                              <span>{u.productMarca || 'Sem marca'}</span>
+                              {u.isReusable && (
+                                <Badge variant="info" className="text-[10px] px-1.5 py-0">
+                                  Reutilizável
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-xs font-medium">Lote: {u.numeroLote}</div>
+                            <div className="text-xs text-muted-foreground flex items-center gap-1">
+                              <span>
+                                Val:{' '}
+                                {u.dataValidade
+                                  ? new Date(u.dataValidade).toLocaleDateString('pt-BR')
+                                  : 'N/A'}
+                              </span>
+                              {isExpired && (
+                                <Badge variant="destructive" className="text-[10px] px-1 py-0">
+                                  Vencido
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>{getStatusBadge(u.status)}</TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="outline">{u.usagesCount} uso(s)</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleOpenUnitAction(u)}
+                            >
+                              Gerenciar Status
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
               )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
 
-      {/* Dialogs */}
+      {/* Modals and Side Sheets */}
       <ProductFormDialog
-        open={isProductDialogOpen}
-        onOpenChange={setIsProductDialogOpen}
-        product={selectedProductForEdit}
-        onSuccess={() => {
-          fetchProducts();
-          fetchStockUnits();
-        }}
+        open={productDialogOpen}
+        onOpenChange={setProductDialogOpen}
+        product={editingProduct}
+        onSuccess={handleRefreshAll}
       />
 
       <LotIntakeDialog
-        open={isLotDialogOpen}
-        onOpenChange={setIsLotDialogOpen}
-        products={simpleProductsList}
-        preselectedProductId={lotPreselectedProductId}
-        onSuccess={() => {
-          fetchProducts();
-          fetchStockUnits();
+        open={lotDialogOpen}
+        onOpenChange={setLotDialogOpen}
+        products={products}
+        preselectedProductId={preselectedProductForLot}
+        onSuccess={handleRefreshAll}
+      />
+
+      <ProductDetailSheet
+        open={detailSheetOpen}
+        onOpenChange={setDetailSheetOpen}
+        productId={selectedProductId}
+        onOpenLotIntake={(prodId) => {
+          setDetailSheetOpen(false);
+          handleOpenNewLot(prodId);
         }}
+        onUpdated={handleRefreshAll}
+      />
+
+      <UnitActionDialog
+        open={unitActionOpen}
+        onOpenChange={setUnitActionOpen}
+        unit={selectedUnitForAction}
+        onSuccess={handleRefreshAll}
       />
     </div>
   );

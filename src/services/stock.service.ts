@@ -394,10 +394,68 @@ export async function recordProductUsage(
       }
     }
 
-    // PATH A: Physical StockUnit provided
-    if (input.stockUnitId) {
+    // PATH A: Physical StockUnit provided (or resolved for reusable product)
+    let resolvedStockUnitId = input.stockUnitId;
+
+    if (!resolvedStockUnitId && input.productId) {
+      const prodCheck = await tx.product.findUnique({ where: { id: input.productId } });
+      if (prodCheck && prodCheck.isReusable) {
+        // Look for unit already in use by this client
+        const clientUnit = await tx.stockUnit.findFirst({
+          where: {
+            currentClientId: clientId,
+            status: { in: ['EmUso', 'Disponivel'] },
+            lot: {
+              productId: prodCheck.id,
+              OR: [{ dataValidade: null }, { dataValidade: { gte: new Date() } }],
+            },
+            quantidadeDisponivel: { gt: new Prisma.Decimal(0) },
+          },
+          include: { lot: true },
+          orderBy: [{ lot: { dataValidade: 'asc' } }, { createdAt: 'asc' }],
+        });
+
+        if (clientUnit) {
+          resolvedStockUnitId = clientUnit.id;
+        } else {
+          // Look for an available unassigned unit
+          const availableUnit = await tx.stockUnit.findFirst({
+            where: {
+              status: 'Disponivel',
+              currentClientId: null,
+              lot: {
+                productId: prodCheck.id,
+                OR: [{ dataValidade: null }, { dataValidade: { gte: new Date() } }],
+              },
+              quantidadeDisponivel: { gt: new Prisma.Decimal(0) },
+            },
+            include: { lot: true },
+            orderBy: [{ lot: { dataValidade: 'asc' } }, { createdAt: 'asc' }],
+          });
+
+          if (availableUnit) {
+            resolvedStockUnitId = availableUnit.id;
+          } else {
+            // Check if there are units of this reusable product owned by other clients
+            const otherUnitsCount = await tx.stockUnit.count({
+              where: {
+                lot: { productId: prodCheck.id },
+                currentClientId: { not: null, notIn: [clientId] },
+              },
+            });
+            if (otherUnitsCount > 0) {
+              throw new ConflictError(
+                'Todas as unidades deste produto reutilizável estão vinculadas a outros clientes. Isolamento entre clientes preservado.'
+              );
+            }
+          }
+        }
+      }
+    }
+
+    if (resolvedStockUnitId) {
       const stockUnit = await tx.stockUnit.findUnique({
-        where: { id: input.stockUnitId },
+        where: { id: resolvedStockUnitId },
         include: {
           lot: {
             include: { product: true },
@@ -497,7 +555,7 @@ export async function recordProductUsage(
 
         if (product.isReusable) {
           // V16, V17, AC 59, AC 66: Reusable Unit & Cross-Client Prevention
-          if (stockUnit.currentClientId !== null && stockUnit.currentClientId !== clientId) {
+          if (stockUnit.currentClientId && stockUnit.currentClientId !== clientId) {
             throw new ConflictError('Esta unidade de estoque já está vinculada a outro cliente.');
           }
 
@@ -622,7 +680,7 @@ export async function recordProductUsage(
       if (!product) {
         throw new NotFoundError('Produto não encontrado');
       }
-      if (product.trackingMode === 'UNIT' && input.quantidade !== undefined && !Number.isInteger(input.quantidade)) {
+      if (product.trackingMode === 'UNIT' && !product.isReusable && input.quantidade !== undefined && !Number.isInteger(input.quantidade)) {
         throw new ValidationError(
           `O produto "${product.nome}" é rastreado por unidade indivisível e não permite consumo fracionado.`
         );
@@ -651,6 +709,7 @@ export async function recordProductUsage(
 
     if (
       product.trackingMode === 'UNIT' &&
+      !product.isReusable &&
       input.quantidade !== undefined &&
       !Number.isInteger(input.quantidade)
     ) {

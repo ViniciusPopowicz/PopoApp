@@ -13,11 +13,19 @@ export async function GET(request: NextRequest) {
     await requireAuth(request);
     const searchParams = request.nextUrl.searchParams;
 
+    const requestedPeriod = searchParams.get('period') ?? 'month';
+    const rawStartDate = searchParams.get('startDate')?.trim() || undefined;
+    const rawEndDate = searchParams.get('endDate')?.trim() || undefined;
+    const effectivePeriod =
+      requestedPeriod === 'custom' && (!rawStartDate || !rawEndDate)
+        ? 'month'
+        : requestedPeriod;
+
     const rawQuery = {
-      period: searchParams.get('period') ?? 'month',
-      startDate: searchParams.get('startDate') ?? undefined,
-      endDate: searchParams.get('endDate') ?? undefined,
-      refDate: searchParams.get('refDate') ?? undefined,
+      period: effectivePeriod,
+      startDate: rawStartDate,
+      endDate: rawEndDate,
+      refDate: searchParams.get('refDate')?.trim() || undefined,
     };
 
     const parsed = dashboardQuerySchema.safeParse(rawQuery);

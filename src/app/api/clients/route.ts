@@ -9,10 +9,17 @@ export async function GET(request: NextRequest) {
     await requireAuth(request);
 
     const searchParams = Object.fromEntries(request.nextUrl.searchParams.entries());
+    if (!searchParams.status && searchParams.active !== undefined) {
+      searchParams.status = searchParams.active === 'true' ? 'ativo' : searchParams.active === 'false' ? 'inativo' : 'todos';
+    }
     const query = clientListQuerySchema.parse(searchParams);
 
     const result = await ClientService.listClients(query);
-    return NextResponse.json({ success: true, ...result });
+    return NextResponse.json({
+      success: true,
+      data: result.items,
+      ...result,
+    });
   } catch (error) {
     if (error instanceof DomainError) {
       return NextResponse.json({ success: false, error: error.message }, { status: error.statusCode });

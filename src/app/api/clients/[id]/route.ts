@@ -37,6 +37,9 @@ export async function PUT(
     const { id } = await params;
 
     const body = await request.json();
+    if (body.status === undefined && typeof body.isActive === 'boolean') {
+      body.status = body.isActive ? 'ativo' : 'inativo';
+    }
     const parsed = updateClientSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -59,6 +62,13 @@ export async function PUT(
     console.error('Error in PUT /api/clients/[id]:', error);
     return NextResponse.json({ success: false, error: 'Erro interno do servidor' }, { status: 500 });
   }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  return PUT(request, context);
 }
 
 export async function DELETE(
