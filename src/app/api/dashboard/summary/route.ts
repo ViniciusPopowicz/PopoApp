@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
     if (error instanceof DomainError) {
       return NextResponse.json({ success: false, error: error.message }, { status: error.statusCode });
     }
+    console.error('[dashboard/summary] Failed to build dashboard summary:', error);
     return NextResponse.json({ success: false, error: 'Erro interno ao gerar métricas do dashboard' }, { status: 500 });
   }
 }

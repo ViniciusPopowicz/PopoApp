@@ -8,6 +8,8 @@ export interface FinancialMetricDto {
   netRevenue: number;           // Faturamento líquido (bruto - descontos)
   receivedRevenue: number;      // Entradas em caixa (pagamentos com status 'Pago' no período)
   outstandingRevenue: number;   // Saldo a receber dos atendimentos realizados no período
+  attendancesCount: number;     // Quantidade de atendimentos realizados no período
+  averageTicket: number;        // Ticket médio (faturamento líquido / atendimentos realizados)
 }
 
 export interface PaymentMethodBreakdownDto {

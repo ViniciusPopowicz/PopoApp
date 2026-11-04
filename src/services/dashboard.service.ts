@@ -160,6 +160,8 @@ export class DashboardService {
       netRevenue,
       receivedRevenue,
       outstandingRevenue,
+      attendancesCount: attendances.length,
+      averageTicket: attendances.length > 0 ? Number((netRevenue / attendances.length).toFixed(2)) : 0,
     };
   }
 

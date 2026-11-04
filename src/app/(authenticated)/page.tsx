@@ -27,74 +27,9 @@ import {
   Boxes,
 } from 'lucide-react';
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/format';
+import type { DashboardSummaryResponseDto } from '@/types/dashboard';
 
-interface DashboardData {
-  financial: {
-    monthly: {
-      receivedRevenue: number;
-      averageTicket: number;
-      totalRevenue: number;
-    };
-  };
-  operations: {
-    appointments: {
-      todayTotal: number;
-      nextAppointments: Array<{
-        id: string;
-        dataHora: string;
-        status: string;
-        client: { id: string; nome: string };
-        plannedProcedures?: Array<{ procedure: { nome: string } }>;
-      }>;
-    };
-    attendances: {
-      completedCount: number;
-      pendingCount: number;
-    };
-  };
-  alerts: {
-    lowStock: {
-      totalAlerts: number;
-      items: Array<{
-        id: string;
-        nome: string;
-        estoqueAtual: number;
-        estoqueMinimo: number;
-        unidade: string;
-        isCritical: boolean;
-      }>;
-    };
-    reminders: {
-      totalPending: number;
-      totalOverdue: number;
-      overdueItems: Array<{
-        id: string;
-        titulo: string;
-        dataVencimento: string;
-        prioridade: string;
-        client?: { nome: string } | null;
-        pixInstallment?: { valor: number } | null;
-      }>;
-      upcomingItems: Array<{
-        id: string;
-        titulo: string;
-        dataVencimento: string;
-        prioridade: string;
-        client?: { nome: string } | null;
-        pixInstallment?: { valor: number } | null;
-      }>;
-    };
-    birthdays: {
-      count: number;
-      items: Array<{
-        id: string;
-        nome: string;
-        diasRestantes: number;
-        proximoAniversario: string;
-      }>;
-    };
-  };
-}
+type DashboardData = DashboardSummaryResponseDto;
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -129,15 +64,13 @@ export default function DashboardPage() {
 
   const monthlyRevenue = data?.financial?.monthly?.receivedRevenue ?? 0;
   const averageTicket = data?.financial?.monthly?.averageTicket ?? 0;
-  const completedAttendances = data?.operations?.attendances?.completedCount ?? 0;
+  const completedAttendances = data?.financial?.monthly?.attendancesCount ?? 0;
   const todayAppointments = data?.operations?.appointments?.todayTotal ?? 0;
 
-  const lowStockItems = data?.alerts?.lowStock?.items ?? [];
-  const overdueReminders = data?.alerts?.reminders?.overdueItems ?? [];
-  const upcomingReminders = data?.alerts?.reminders?.upcomingItems ?? [];
-  const allReminders = [...overdueReminders, ...upcomingReminders];
-  const birthdays = data?.alerts?.birthdays?.items ?? [];
-  const nextAppointments = data?.operations?.appointments?.nextAppointments ?? [];
+  const lowStockItems = data?.alerts?.lowStock ?? [];
+  const allReminders = data?.alerts?.reminders?.items ?? [];
+  const birthdays = data?.alerts?.birthdays ?? [];
+  const nextAppointments = data?.operations?.appointments?.upcomingList ?? [];
 
   return (
     <div className="space-y-6">
@@ -255,15 +188,13 @@ export default function DashboardPage() {
                   </TableHeader>
                   <TableBody>
                     {nextAppointments.map((agendamento) => {
-                      const procNames = agendamento.plannedProcedures
-                        ?.map((p) => p.procedure.nome)
-                        .join(', ') || 'Não especificado';
+                      const procNames = agendamento.procedimentosPlanejados?.join(', ') || 'Não especificado';
                       return (
                         <TableRow key={agendamento.id}>
                           <TableCell className="font-medium whitespace-nowrap">
                             {formatDateTime(new Date(agendamento.dataHora))}
                           </TableCell>
-                          <TableCell className="font-medium">{agendamento.client?.nome || '—'}</TableCell>
+                          <TableCell className="font-medium">{agendamento.clientName || '—'}</TableCell>
                           <TableCell className="text-muted-foreground text-sm max-w-[200px] truncate">
                             {procNames}
                           </TableCell>
@@ -306,15 +237,15 @@ export default function DashboardPage() {
               ) : lowStockItems.length > 0 ? (
                 <ul className="space-y-3">
                   {lowStockItems.slice(0, 5).map((item) => (
-                    <li key={item.id} className="flex justify-between items-center text-sm border-b pb-2 last:border-0 last:pb-0">
+                    <li key={item.productId} className="flex justify-between items-center text-sm border-b pb-2 last:border-0 last:pb-0">
                       <div>
-                        <p className="font-medium">{item.nome}</p>
+                        <p className="font-medium">{item.productName}</p>
                         <p className="text-xs text-muted-foreground">
-                          Mínimo: {item.estoqueMinimo} {item.unidade}
+                          {[item.marca, item.categoria].filter(Boolean).join(' • ') || item.unidade}
                         </p>
                       </div>
-                      <Badge variant={item.isCritical ? 'destructive' : 'outline'}>
-                        {item.estoqueAtual} {item.unidade}
+                      <Badge variant={item.alertLevel === 'CRITICO' ? 'destructive' : 'outline'}>
+                        {item.availableUnits} {item.unidade}
                       </Badge>
                     </li>
                   ))}
@@ -347,7 +278,7 @@ export default function DashboardPage() {
               ) : allReminders.length > 0 ? (
                 <ul className="space-y-3">
                   {allReminders.slice(0, 5).map((lembrete) => {
-                    const isOverdue = new Date(lembrete.dataVencimento) < new Date();
+                    const isOverdue = lembrete.isOverdue;
                     return (
                       <li key={lembrete.id} className="flex flex-col gap-1 border-b last:border-0 pb-2 last:pb-0">
                         <div className="flex justify-between items-start">
@@ -357,12 +288,12 @@ export default function DashboardPage() {
                           </Badge>
                         </div>
                         <div className="flex justify-between items-center text-xs text-muted-foreground">
-                          <span>{lembrete.client?.nome || '—'}</span>
+                          <span>{lembrete.clientName || '—'}</span>
                           <span>Venc.: {formatDate(new Date(lembrete.dataVencimento))}</span>
                         </div>
-                        {lembrete.pixInstallment && (
+                        {lembrete.installmentValor != null && (
                           <div className="text-xs font-semibold text-primary">
-                            {formatCurrency(lembrete.pixInstallment.valor)}
+                            {formatCurrency(lembrete.installmentValor)}
                           </div>
                         )}
                       </li>
@@ -393,16 +324,14 @@ export default function DashboardPage() {
                     <li key={a.id} className="flex justify-between items-center text-sm border-b pb-2 last:border-0 last:pb-0">
                       <div>
                         <p className="font-medium">{a.nome}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatDate(new Date(a.proximoAniversario))}
-                        </p>
+                        <p className="text-xs text-muted-foreground">{a.dataAniversario}</p>
                       </div>
-                      <Badge variant={a.diasRestantes === 0 ? 'default' : 'secondary'}>
-                        {a.diasRestantes === 0
+                      <Badge variant={a.diasFaltando === 0 ? 'default' : 'secondary'}>
+                        {a.diasFaltando === 0
                           ? 'Hoje!'
-                          : a.diasRestantes === 1
+                          : a.diasFaltando === 1
                           ? 'Amanhã'
-                          : `Em ${a.diasRestantes} dias`}
+                          : `Em ${a.diasFaltando} dias`}
                       </Badge>
                     </li>
                   ))}

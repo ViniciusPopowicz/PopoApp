@@ -4,6 +4,11 @@ const cp = require('child_process');
 let currentPipe = null;
 let heartbeatSocket = null;
 
+/**
+ * Starts the LocalDB instance (if needed) and resolves its named pipe.
+ * NOTE: this uses execSync and blocks the event loop (~1s), so it must NOT be
+ * called on every incoming connection. Use getPipe() instead, which caches.
+ */
 function ensureLocalDb() {
   try {
     cp.execSync('sqllocaldb start MSSQLLocalDB', { stdio: 'pipe' });
@@ -18,19 +23,54 @@ function ensureLocalDb() {
   return currentPipe;
 }
 
+/** Returns the cached pipe name, resolving it only when unknown. */
+function getPipe() {
+  return currentPipe || ensureLocalDb();
+}
+
 function maintainHeartbeat() {
   if (heartbeatSocket && !heartbeatSocket.destroyed) return;
-  const pipe = ensureLocalDb();
+  const pipe = getPipe();
   if (!pipe) return;
   heartbeatSocket = net.connect(pipe, () => {
     // Keep alive connection
   });
   heartbeatSocket.on('error', () => {
     heartbeatSocket = null;
+    // Pipe may have changed (instance restarted); force re-resolution next time.
+    currentPipe = null;
   });
   heartbeatSocket.on('close', () => {
     heartbeatSocket = null;
   });
+}
+
+function bridge(tcpSocket, retried = false) {
+  const pipe = retried ? ensureLocalDb() : getPipe();
+  if (!pipe) {
+    tcpSocket.destroy(new Error('LocalDB pipe not found'));
+    return;
+  }
+
+  let connected = false;
+  const pipeSocket = net.connect(pipe, () => {
+    connected = true;
+    tcpSocket.pipe(pipeSocket);
+    pipeSocket.pipe(tcpSocket);
+    tcpSocket.resume();
+  });
+
+  pipeSocket.on('error', () => {
+    if (!connected && !retried && !tcpSocket.destroyed) {
+      // Stale pipe name (LocalDB restarted): refresh once and retry.
+      currentPipe = null;
+      bridge(tcpSocket, true);
+      return;
+    }
+    tcpSocket.destroy();
+  });
+  tcpSocket.on('error', () => pipeSocket.destroy());
+  tcpSocket.on('close', () => pipeSocket.destroy());
 }
 
 function startProxy(port = 1433) {
@@ -39,22 +79,9 @@ function startProxy(port = 1433) {
   setInterval(maintainHeartbeat, 5000);
 
   const server = net.createServer((tcpSocket) => {
-    const pipe = ensureLocalDb();
-    if (!pipe) {
-      tcpSocket.destroy(new Error('LocalDB pipe not found'));
-      return;
-    }
-    const pipeSocket = net.connect(pipe, () => {
-      tcpSocket.pipe(pipeSocket);
-      pipeSocket.pipe(tcpSocket);
-    });
-
-    tcpSocket.on('error', (err) => {
-      pipeSocket.destroy();
-    });
-    pipeSocket.on('error', (err) => {
-      tcpSocket.destroy();
-    });
+    // Buffer client data until the pipe is connected.
+    tcpSocket.pause();
+    bridge(tcpSocket);
   });
 
   server.on('error', (err) => {
