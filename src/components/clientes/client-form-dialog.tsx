@@ -1,30 +1,31 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { isValidCpf, formatCpf, normalizeCpf } from '@/lib/cpf';
-import { Plus, Trash2, Upload, User, AlertCircle } from 'lucide-react';
-
-export interface EmergencyContactItem {
-  id?: string;
-  nome: string;
-  telefone: string;
-  parentesco: string;
-  observacoes?: string | null;
-  isActive?: boolean;
-}
+import { DatePicker } from '@/components/ui/date-picker';
+import { AppCombobox } from '@/components/ui/app-combobox';
+import { isValidCpf } from '@/lib/cpf';
+import {
+  maskCPF,
+  unmaskCPF,
+  maskPhoneBR,
+  unmaskPhoneBR,
+  maskDateBR,
+  dateBRToISO,
+  isoToDateBR,
+} from '@/lib/masks';
+import { ClientSummaryDto, EmergencyContactDto } from '@/types/client';
+import { Plus, Trash2, AlertCircle, UserPlus, Edit3, ShieldAlert, Camera, X } from 'lucide-react';
 
 export interface ClientFormData {
   id?: string;
@@ -35,534 +36,594 @@ export interface ClientFormData {
   dataNascimento?: string | null;
   endereco?: string | null;
   observacoes?: string | null;
-  status: 'ativo' | 'inativo';
+  status?: string;
   profilePhotoId?: string | null;
-  emergencyContacts?: EmergencyContactItem[];
+  profilePhotoUrl?: string | null;
+  emergencyContacts?: EmergencyContactDto[];
 }
 
 interface ClientFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  client?: ClientFormData | null;
-  onSuccess: () => void;
+  clientToEdit?: ClientSummaryDto | ClientFormData | null;
+  client?: ClientSummaryDto | ClientFormData | null;
+  onSuccess: (savedClient?: any) => void;
 }
+
+interface EmergencyContactFormItem {
+  id?: string;
+  nome: string;
+  telefone: string;
+  parentesco: string;
+  observacoes: string;
+}
+
+const PARENTESCO_OPTIONS = [
+  { value: 'Cônjuge / Parceiro(a)', label: 'Cônjuge / Parceiro(a)' },
+  { value: 'Mãe / Pai', label: 'Mãe / Pai' },
+  { value: 'Filho(a)', label: 'Filho(a)' },
+  { value: 'Irmão / Irmã', label: 'Irmão / Irmã' },
+  { value: 'Familiar', label: 'Familiar' },
+  { value: 'Amigo(a)', label: 'Amigo(a)' },
+  { value: 'Outro', label: 'Outro' },
+];
 
 export function ClientFormDialog({
   open,
   onOpenChange,
-  client,
+  clientToEdit: clientToEditProp,
+  client: clientProp,
   onSuccess,
 }: ClientFormDialogProps) {
-  const isEditing = Boolean(client?.id);
+  const clientToEdit = clientToEditProp ?? clientProp ?? null;
+  const isEditing = Boolean(clientToEdit?.id);
 
   const [nome, setNome] = useState('');
   const [cpf, setCpf] = useState('');
   const [telefone, setTelefone] = useState('');
   const [email, setEmail] = useState('');
-  const [dataNascimento, setDataNascimento] = useState('');
+  const [dataNascimentoMasked, setDataNascimentoMasked] = useState('');
   const [endereco, setEndereco] = useState('');
   const [observacoes, setObservacoes] = useState('');
-  const [status, setStatus] = useState<'ativo' | 'inativo'>('ativo');
-  const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContactItem[]>([]);
-  
-  // Photo upload
+  const [contacts, setContacts] = useState<EmergencyContactFormItem[]>([]);
+
   const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Validation & Loading
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [cpfError, setCpfError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (client) {
-      setNome(client.nome || '');
-      setCpf(client.cpf ? formatCpf(client.cpf) : '');
-      setTelefone(client.telefone || '');
-      setEmail(client.email || '');
-      setDataNascimento(
-        client.dataNascimento
-          ? new Date(client.dataNascimento).toISOString().split('T')[0]
-          : ''
-      );
-      setEndereco(client.endereco || '');
-      setObservacoes(client.observacoes || '');
-      setStatus(client.status || 'ativo');
-      setEmergencyContacts(
-        client.emergencyContacts && client.emergencyContacts.length > 0
-          ? client.emergencyContacts.map((c) => ({ ...c }))
-          : []
-      );
-      if (client.profilePhotoId) {
-        setPhotoPreview(`/api/attachments/${client.profilePhotoId}`);
+    if (open) {
+      setErrorMessage(null);
+      setCpfError(null);
+      setPhotoFile(null);
+
+      if (clientToEdit) {
+        setNome(clientToEdit.nome || '');
+        setCpf(maskCPF(clientToEdit.cpf || ''));
+        setTelefone(maskPhoneBR(clientToEdit.telefone || ''));
+        setEmail(clientToEdit.email || '');
+        setDataNascimentoMasked(
+          clientToEdit.dataNascimento ? isoToDateBR(clientToEdit.dataNascimento) : ''
+        );
+        setEndereco(clientToEdit.endereco || '');
+        setObservacoes(clientToEdit.observacoes || '');
+        setPhotoPreviewUrl(clientToEdit.profilePhotoUrl || null);
+        setContacts(
+          (clientToEdit.emergencyContacts || []).map((c: EmergencyContactDto) => ({
+            id: c.id,
+            nome: c.nome,
+            telefone: maskPhoneBR(c.telefone),
+            parentesco: c.parentesco,
+            observacoes: c.observacoes || '',
+          }))
+        );
       } else {
-        setPhotoPreview(null);
+        setNome('');
+        setCpf('');
+        setTelefone('');
+        setEmail('');
+        setDataNascimentoMasked('');
+        setEndereco('');
+        setObservacoes('');
+        setPhotoPreviewUrl(null);
+        setContacts([]);
       }
-    } else {
-      setNome('');
-      setCpf('');
-      setTelefone('');
-      setEmail('');
-      setDataNascimento('');
-      setEndereco('');
-      setObservacoes('');
-      setStatus('ativo');
-      setEmergencyContacts([]);
-      setPhotoPreview(null);
     }
-    setPhotoFile(null);
-    setErrorMessage(null);
-    setCpfError(null);
-  }, [client, open]);
+  }, [open, clientToEdit]);
 
-  function handleCpfChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const raw = e.target.value;
-    const digits = normalizeCpf(raw).slice(0, 11);
-    let masked = digits;
-    if (digits.length > 9) {
-      masked = `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`;
-    } else if (digits.length > 6) {
-      masked = `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
-    } else if (digits.length > 3) {
-      masked = `${digits.slice(0, 3)}.${digits.slice(3)}`;
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setErrorMessage('Selecione um arquivo de imagem válido (JPG, PNG, WEBP).');
+      return;
     }
-    setCpf(masked);
+    setPhotoFile(file);
+    const objectUrl = URL.createObjectURL(file);
+    setPhotoPreviewUrl(objectUrl);
+  };
 
-    if (digits.length === 11) {
-      if (!isValidCpf(digits)) {
-        setCpfError('CPF inválido. Verifique os dígitos verificadores.');
+  const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = maskCPF(e.target.value);
+    setCpf(formatted);
+
+    const rawDigits = unmaskCPF(formatted);
+    if (rawDigits.length === 11) {
+      if (!isValidCpf(rawDigits)) {
+        setCpfError('CPF inválido (dígitos verificadores incorretos)');
       } else {
         setCpfError(null);
       }
-    } else if (digits.length > 0) {
-      setCpfError('CPF deve conter 11 dígitos.');
     } else {
       setCpfError(null);
     }
-  }
+  };
 
-  function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (!file.type.startsWith('image/')) {
-        setErrorMessage('Por favor, selecione um arquivo de imagem válido (JPG, PNG, WebP).');
-        return;
-      }
-      setPhotoFile(file);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setPhotoPreview(event.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  }
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setTelefone(maskPhoneBR(e.target.value));
+  };
 
-  function addEmergencyContact() {
-    setEmergencyContacts((prev) => [
+  const handleAddContact = () => {
+    setContacts((prev) => [
       ...prev,
-      { nome: '', telefone: '', parentesco: '', observacoes: '', isActive: true },
+      { nome: '', telefone: '', parentesco: '', observacoes: '' },
     ]);
-  }
+  };
 
-  function updateContact(index: number, field: keyof EmergencyContactItem, value: any) {
-    setEmergencyContacts((prev) => {
-      const copy = [...prev];
-      copy[index] = { ...copy[index], [field]: value };
-      return copy;
-    });
-  }
+  const handleRemoveContact = (index: number) => {
+    setContacts((prev) => prev.filter((_, idx) => idx !== index));
+  };
 
-  function removeContact(index: number) {
-    setEmergencyContacts((prev) => prev.filter((_, i) => i !== index));
-  }
+  const handleContactFieldChange = (
+    index: number,
+    field: keyof EmergencyContactFormItem,
+    value: string
+  ) => {
+    setContacts((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+        if (field === 'telefone') {
+          return { ...item, telefone: maskPhoneBR(value) };
+        }
+        return { ...item, [field]: value };
+      })
+    );
+  };
 
-  async function handleSubmit(e: React.FormEvent) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
-    // Validate name
-    if (!nome.trim() || nome.trim().length < 2) {
-      setErrorMessage('O nome deve ter pelo menos 2 caracteres.');
+    const rawCpf = unmaskCPF(cpf);
+    if (!isValidCpf(rawCpf)) {
+      setCpfError('Informe um CPF válido de 11 dígitos.');
       return;
     }
 
-    // Validate CPF
-    const rawCpf = normalizeCpf(cpf);
-    if (!rawCpf || !isValidCpf(rawCpf)) {
-      setCpfError('CPF obrigatório e válido (11 dígitos com checksum correto).');
-      setErrorMessage('Por favor, informe um CPF válido.');
+    const rawPhone = unmaskPhoneBR(telefone);
+    if (rawPhone.length < 8) {
+      setErrorMessage('Informe um telefone válido com DDD.');
       return;
     }
 
-    // Validate phone
-    if (!telefone.trim() || telefone.trim().length < 8) {
-      setErrorMessage('O telefone deve ter pelo menos 8 dígitos.');
-      return;
-    }
-
-    // Validate emergency contacts
-    for (let i = 0; i < emergencyContacts.length; i++) {
-      const c = emergencyContacts[i];
-      if (!c.nome.trim()) {
-        setErrorMessage(`Contato de emergência #${i + 1}: Informe o nome.`);
+    let isoBirthDate: string | null = null;
+    if (dataNascimentoMasked.trim()) {
+      const converted = dateBRToISO(dataNascimentoMasked);
+      if (!converted) {
+        setErrorMessage('Data de nascimento inválida. Use o formato DD/MM/AAAA.');
         return;
       }
-      if (!c.telefone.trim() || c.telefone.trim().length < 8) {
-        setErrorMessage(`Contato de emergência #${i + 1}: Informe um telefone válido.`);
-        return;
-      }
-      if (!c.parentesco.trim()) {
-        setErrorMessage(`Contato de emergência #${i + 1}: Informe o parentesco.`);
+      isoBirthDate = converted;
+    }
+
+    for (let i = 0; i < contacts.length; i++) {
+      const c = contacts[i];
+      if (!c.nome.trim() || unmaskPhoneBR(c.telefone).length < 8 || !c.parentesco.trim()) {
+        setErrorMessage(
+          `Preencha Nome, Telefone e Parentesco do Contato de Emergência #${i + 1}.`
+        );
         return;
       }
     }
 
-    setIsSubmitting(true);
+    setSubmitting(true);
 
     try {
-      const payload: any = {
-        nome: nome.trim(),
-        cpf: rawCpf,
-        telefone: telefone.trim(),
-        email: email.trim() || null,
-        dataNascimento: dataNascimento ? dataNascimento : null,
-        endereco: endereco.trim() || null,
-        observacoes: observacoes.trim() || null,
-        status,
-      };
-
-      let savedClientId = client?.id;
-
-      if (isEditing && savedClientId) {
-        // Update client
-        const res = await fetch(`/api/clients/${savedClientId}`, {
+      if (isEditing && clientToEdit) {
+        const res = await fetch(`/api/clients/${clientToEdit.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            nome: nome.trim(),
+            cpf: rawCpf,
+            telefone: rawPhone,
+            email: email.trim() || null,
+            dataNascimento: isoBirthDate,
+            endereco: endereco.trim() || null,
+            observacoes: observacoes.trim() || null,
+          }),
         });
 
-        const json = await res.json();
-        if (!res.ok || !json.success) {
-          throw new Error(json.error || 'Erro ao atualizar cliente.');
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Erro ao atualizar cliente.');
         }
 
-        // Synchronize emergency contacts if changed
-        // Fetch current contacts or create new ones
-        for (const contact of emergencyContacts) {
-          if (!contact.id) {
-            await fetch(`/api/clients/${savedClientId}/contacts`, {
+        const existingIds = new Set(
+          (clientToEdit.emergencyContacts || [])
+            .map((c: EmergencyContactDto) => c.id)
+            .filter((id): id is string => Boolean(id))
+        );
+        const currentIds = new Set(contacts.filter((c) => c.id).map((c) => c.id!));
+
+        for (const oldId of Array.from(existingIds)) {
+          if (!currentIds.has(oldId)) {
+            await fetch(
+              `/api/clients/${clientToEdit.id}/contacts/${oldId}`,
+              { method: 'DELETE' }
+            );
+          }
+        }
+
+        for (const contact of contacts) {
+          const contactPayload = {
+            nome: contact.nome.trim(),
+            telefone: unmaskPhoneBR(contact.telefone),
+            parentesco: contact.parentesco.trim(),
+            observacoes: contact.observacoes.trim() || null,
+          };
+
+          if (contact.id) {
+            await fetch(
+              `/api/clients/${clientToEdit.id}/contacts/${contact.id}`,
+              {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(contactPayload),
+              }
+            );
+          } else {
+            await fetch(`/api/clients/${clientToEdit.id}/contacts`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                nome: contact.nome.trim(),
-                telefone: contact.telefone.trim(),
-                parentesco: contact.parentesco.trim(),
-                observacoes: contact.observacoes?.trim() || null,
-                isActive: contact.isActive !== false,
-              }),
+              body: JSON.stringify(contactPayload),
             });
           }
         }
-      } else {
-        // Create client with emergency contacts
-        payload.emergencyContacts = emergencyContacts.map((c) => ({
-          nome: c.nome.trim(),
-          telefone: c.telefone.trim(),
-          parentesco: c.parentesco.trim(),
-          observacoes: c.observacoes?.trim() || null,
-          isActive: c.isActive !== false,
-        }));
 
+        if (photoFile && clientToEdit.id) {
+          const formData = new FormData();
+          formData.append('file', photoFile);
+          await fetch(`/api/clients/${clientToEdit.id}/photo`, {
+            method: 'POST',
+            body: formData,
+          });
+        }
+
+        const refreshedRes = await fetch(`/api/clients/${clientToEdit.id}`);
+        const refreshedJson = await refreshedRes.json();
+
+        onSuccess(refreshedJson.data || data.data);
+        onOpenChange(false);
+      } else {
         const res = await fetch('/api/clients', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            nome: nome.trim(),
+            cpf: rawCpf,
+            telefone: rawPhone,
+            email: email.trim() || null,
+            dataNascimento: isoBirthDate,
+            endereco: endereco.trim() || null,
+            observacoes: observacoes.trim() || null,
+            status: 'ativo',
+            emergencyContacts: contacts.map((c) => ({
+              nome: c.nome.trim(),
+              telefone: unmaskPhoneBR(c.telefone),
+              parentesco: c.parentesco.trim(),
+              observacoes: c.observacoes.trim() || null,
+            })),
+          }),
         });
 
-        const json = await res.json();
-        if (!res.ok || !json.success) {
-          throw new Error(json.error || 'Erro ao criar cliente.');
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Erro ao cadastrar cliente.');
         }
 
-        savedClientId = json.data?.id;
-      }
+        let createdClient = data.data;
 
-      // If a new photo was selected, upload it
-      if (photoFile && savedClientId) {
-        const formData = new FormData();
-        formData.append('file', photoFile);
+        if (photoFile && createdClient?.id) {
+          const formData = new FormData();
+          formData.append('file', photoFile);
+          await fetch(`/api/clients/${createdClient.id}/photo`, {
+            method: 'POST',
+            body: formData,
+          });
 
-        const photoRes = await fetch(`/api/clients/${savedClientId}/photo`, {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!photoRes.ok) {
-          const photoJson = await photoRes.json();
-          console.warn('Erro ao atualizar foto:', photoJson.error);
+          const refreshedRes = await fetch(`/api/clients/${createdClient.id}`);
+          const refreshedJson = await refreshedRes.json();
+          if (refreshedJson.success && refreshedJson.data) {
+            createdClient = refreshedJson.data;
+          }
         }
-      }
 
-      onOpenChange(false);
-      onSuccess();
+        onSuccess(createdClient);
+        onOpenChange(false);
+      }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Ocorreu um erro ao salvar o cliente.');
+      setErrorMessage(err.message || 'Erro inesperado ao salvar cliente.');
     } finally {
-      setIsSubmitting(false);
+      setSubmitting(false);
     }
-  }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEditing ? 'Editar Cliente' : 'Novo Cliente'}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2 text-xl">
+            {isEditing ? (
+              <>
+                <Edit3 className="h-5 w-5 text-primary" />
+                Editar Cliente
+              </>
+            ) : (
+              <>
+                <UserPlus className="h-5 w-5 text-primary" />
+                Novo Cliente
+              </>
+            )}
+          </DialogTitle>
           <DialogDescription>
             {isEditing
-              ? 'Atualize os dados cadastrais e contatos de emergência do paciente.'
-              : 'Preencha as informações cadastrais e contatos de emergência do novo paciente.'}
+              ? 'Atualize os dados cadastrais, observações clínicas e contatos de emergência.'
+              : 'Cadastre um novo paciente com validação de CPF e contatos de emergência.'}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6 py-2">
           {errorMessage && (
-            <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md">
+            <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
               <AlertCircle className="h-4 w-4 shrink-0" />
               <span>{errorMessage}</span>
             </div>
           )}
 
-          {/* Profile Photo & Basic Data */}
-          <div className="flex flex-col sm:flex-row gap-6 items-start">
-            <div className="flex flex-col items-center gap-2 self-center sm:self-start">
-              <div className="w-24 h-24 rounded-full border-2 border-dashed border-muted-foreground/40 flex items-center justify-center overflow-hidden bg-muted relative">
-                {photoPreview ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
-                    src={photoPreview}
-                    alt="Foto de perfil"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <User className="h-10 w-10 text-muted-foreground" />
-                )}
-              </div>
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handlePhotoSelect}
-                accept="image/*"
-                className="hidden"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => fileInputRef.current?.click()}
-                className="text-xs"
-              >
-                <Upload className="h-3.5 w-3.5 mr-1" />
-                {photoPreview ? 'Trocar Foto' : 'Adicionar Foto'}
-              </Button>
+          {/* Foto de Perfil do Paciente */}
+          <div className="flex items-center gap-4 p-3 rounded-lg border bg-muted/20">
+            <div className="relative h-16 w-16 rounded-full overflow-hidden border-2 border-primary/20 bg-primary/10 flex items-center justify-center shrink-0">
+              {photoPreviewUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={photoPreviewUrl}
+                  alt="Foto do paciente"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <Camera className="h-6 w-6 text-primary/60" />
+              )}
             </div>
-
-            <div className="flex-1 w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="sm:col-span-2 space-y-1">
-                <Label htmlFor="nome">
-                  Nome Completo <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="nome"
-                  value={nome}
-                  onChange={(e) => setNome(e.target.value)}
-                  placeholder="Ex: Maria da Silva"
-                  required
+            <div className="flex-1 space-y-1">
+              <Label className="text-sm font-medium">Foto de Identificação do Paciente</Label>
+              <p className="text-xs text-muted-foreground">
+                Exibida na agenda, prontuário e ficha de atendimento (JPG, PNG ou WEBP).
+              </p>
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={handlePhotoSelect}
                 />
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="cpf">
-                  CPF <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="cpf"
-                  value={cpf}
-                  onChange={handleCpfChange}
-                  placeholder="000.000.000-00"
-                  required
-                />
-                {cpfError && (
-                  <p className="text-xs text-destructive">{cpfError}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1.5"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Camera className="h-3.5 w-3.5" />
+                  {photoPreviewUrl ? 'Alterar Foto' : 'Selecionar Foto'}
+                </Button>
+                {photoFile && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-muted-foreground"
+                    onClick={() => {
+                      setPhotoFile(null);
+                      setPhotoPreviewUrl(clientToEdit?.profilePhotoUrl || null);
+                    }}
+                  >
+                    <X className="h-3.5 w-3.5 mr-1" />
+                    Desfazer
+                  </Button>
                 )}
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="telefone">
-                  Telefone <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="telefone"
-                  value={telefone}
-                  onChange={(e) => setTelefone(e.target.value)}
-                  placeholder="(11) 98765-4321"
-                  required
-                />
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <Label htmlFor="email">E-mail</Label>
+          {/* Dados Pessoais */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2 space-y-1.5">
+              <Label htmlFor="client-nome">Nome Completo *</Label>
               <Input
-                id="email"
+                id="client-nome"
+                placeholder="Ex: Maria Fernanda Oliveira"
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="client-cpf">CPF *</Label>
+              <Input
+                id="client-cpf"
+                inputMode="numeric"
+                placeholder="000.000.000-00"
+                value={cpf}
+                onChange={handleCpfChange}
+                maxLength={14}
+                required
+                className={cpfError ? 'border-destructive focus-visible:ring-destructive' : ''}
+              />
+              {cpfError && (
+                <p className="text-xs text-destructive font-medium">{cpfError}</p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="client-telefone">Telefone / WhatsApp *</Label>
+              <Input
+                id="client-telefone"
+                inputMode="numeric"
+                placeholder="(11) 99999-9999"
+                value={telefone}
+                onChange={handlePhoneChange}
+                maxLength={15}
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="client-email">E-mail</Label>
+              <Input
+                id="client-email"
                 type="email"
+                placeholder="paciente@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="cliente@exemplo.com"
               />
             </div>
 
-            <div className="space-y-1">
-              <Label htmlFor="dataNascimento">Data de Nascimento</Label>
-              <Input
-                id="dataNascimento"
-                type="date"
-                value={dataNascimento}
-                onChange={(e) => setDataNascimento(e.target.value)}
+            <div className="space-y-1.5">
+              <Label htmlFor="client-nascimento">Data de Nascimento</Label>
+              <DatePicker
+                id="client-nascimento"
+                placeholder="DD/MM/AAAA"
+                value={dataNascimentoMasked}
+                onChange={setDataNascimentoMasked}
+                maxDate={new Date()}
               />
             </div>
 
-            <div className="sm:col-span-2 space-y-1">
-              <Label htmlFor="endereco">Endereço Completo</Label>
+            <div className="sm:col-span-2 space-y-1.5">
+              <Label htmlFor="client-endereco">Endereço Completo</Label>
               <Input
-                id="endereco"
+                id="client-endereco"
+                placeholder="Rua, Número, Complemento, Bairro, Cidade - UF"
                 value={endereco}
                 onChange={(e) => setEndereco(e.target.value)}
-                placeholder="Rua, número, complemento, bairro, cidade - UF"
               />
             </div>
 
-            <div className="sm:col-span-2 space-y-1">
-              <Label htmlFor="observacoes">Observações Gerais / Alergias</Label>
-              <Textarea
-                id="observacoes"
+            <div className="sm:col-span-2 space-y-1.5">
+              <Label htmlFor="client-observacoes">
+                Observações Gerais / Anotações Clínicas Iniciais
+              </Label>
+              <textarea
+                id="client-observacoes"
+                rows={3}
+                placeholder="Alergias conhecidas, restrições médicas, preferências de horário..."
                 value={observacoes}
                 onChange={(e) => setObservacoes(e.target.value)}
-                placeholder="Observações clínicas relevantes, restrições, etc."
-                rows={2}
+                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               />
-            </div>
-
-            <div className="sm:col-span-2 flex items-center justify-between p-3 border rounded-lg bg-card">
-              <div>
-                <Label className="font-medium">Status do Paciente</Label>
-                <p className="text-xs text-muted-foreground">
-                  Pacientes inativos não aparecem na agenda diária, mas mantêm todo o histórico clínico.
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant={status === 'ativo' ? 'default' : 'secondary'}
-                size="sm"
-                onClick={() => setStatus(status === 'ativo' ? 'inativo' : 'ativo')}
-              >
-                {status === 'ativo' ? 'Ativo' : 'Inativo'}
-              </Button>
             </div>
           </div>
 
-          {/* Emergency Contacts Section (1:N) */}
-          <div className="border-t pt-4 space-y-4">
+          {/* Contatos de Emergência */}
+          <div className="space-y-3 border-t pt-4">
             <div className="flex items-center justify-between">
-              <div>
-                <h4 className="font-semibold text-sm">Contatos de Emergência (1:N)</h4>
-                <p className="text-xs text-muted-foreground">
-                  Pessoas para contato em caso de intercorrência ou emergência médica.
-                </p>
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 text-amber-600" />
+                <h4 className="text-sm font-semibold">Contatos de Emergência</h4>
               </div>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={addEmergencyContact}
+                onClick={handleAddContact}
+                className="gap-1.5"
               >
-                <Plus className="h-4 w-4 mr-1" />
+                <Plus className="h-3.5 w-3.5" />
                 Adicionar Contato
               </Button>
             </div>
 
-            {emergencyContacts.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic bg-muted/40 p-3 rounded text-center">
-                Nenhum contato de emergência cadastrado. Clique no botão acima para adicionar.
+            {contacts.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">
+                Nenhum contato de emergência cadastrado para este cliente.
               </p>
             ) : (
               <div className="space-y-3">
-                {emergencyContacts.map((contact, idx) => (
+                {contacts.map((contact, idx) => (
                   <div
-                    key={idx}
-                    className="p-3 border rounded-lg bg-muted/20 relative space-y-3"
+                    key={contact.id || idx}
+                    className="rounded-lg border bg-muted/30 p-3 space-y-3"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold uppercase text-muted-foreground">
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                         Contato #{idx + 1}
                       </span>
                       <Button
                         type="button"
                         variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                        onClick={() => removeContact(idx)}
+                        size="sm"
+                        onClick={() => handleRemoveContact(idx)}
+                        className="h-7 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-3.5 w-3.5 mr-1" />
+                        Remover
                       </Button>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                       <div className="space-y-1">
-                        <Label className="text-xs">
-                          Nome do Contato <span className="text-destructive">*</span>
-                        </Label>
+                        <Label className="text-xs">Nome *</Label>
                         <Input
+                          placeholder="Nome do contato"
                           value={contact.nome}
-                          onChange={(e) => updateContact(idx, 'nome', e.target.value)}
-                          placeholder="Ex: Carlos da Silva"
-                          className="h-8 text-xs"
+                          onChange={(e) =>
+                            handleContactFieldChange(idx, 'nome', e.target.value)
+                          }
                           required
                         />
                       </div>
+
                       <div className="space-y-1">
-                        <Label className="text-xs">
-                          Telefone <span className="text-destructive">*</span>
-                        </Label>
+                        <Label className="text-xs">Telefone *</Label>
                         <Input
-                          value={contact.telefone}
-                          onChange={(e) => updateContact(idx, 'telefone', e.target.value)}
+                          inputMode="numeric"
                           placeholder="(11) 99999-9999"
-                          className="h-8 text-xs"
+                          value={contact.telefone}
+                          onChange={(e) =>
+                            handleContactFieldChange(idx, 'telefone', e.target.value)
+                          }
+                          maxLength={15}
                           required
                         />
                       </div>
+
                       <div className="space-y-1">
-                        <Label className="text-xs">
-                          Parentesco <span className="text-destructive">*</span>
-                        </Label>
-                        <Input
+                        <Label className="text-xs">Parentesco / Relação *</Label>
+                        <AppCombobox
+                          options={PARENTESCO_OPTIONS}
                           value={contact.parentesco}
-                          onChange={(e) => updateContact(idx, 'parentesco', e.target.value)}
-                          placeholder="Ex: Cônjuge, Mãe, Irmão"
-                          className="h-8 text-xs"
-                          required
-                        />
-                      </div>
-                      <div className="sm:col-span-3 space-y-1">
-                        <Label className="text-xs">Observações do Contato</Label>
-                        <Input
-                          value={contact.observacoes || ''}
-                          onChange={(e) => updateContact(idx, 'observacoes', e.target.value)}
-                          placeholder="Ex: Disponível após as 18h"
-                          className="h-8 text-xs"
+                          onChange={(val) =>
+                            handleContactFieldChange(idx, 'parentesco', val)
+                          }
+                          placeholder="Ex: Cônjuge, Mãe..."
+                          creatable
                         />
                       </div>
                     </div>
@@ -572,17 +633,21 @@ export function ClientFormDialog({
             )}
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="gap-2 pt-2">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={isSubmitting}
+              disabled={submitting}
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Salvando...' : isEditing ? 'Salvar Alterações' : 'Cadastrar Cliente'}
+            <Button type="submit" disabled={submitting || Boolean(cpfError)}>
+              {submitting
+                ? 'Salvando...'
+                : isEditing
+                ? 'Salvar Alterações'
+                : 'Cadastrar Cliente'}
             </Button>
           </DialogFooter>
         </form>

@@ -19,11 +19,13 @@ export function mapProcedureToDto(
   procedure: any,
   usageStats?: { attendances: number; plannedAppointments: number }
 ): ProcedureResponseDto | ProcedureDetailResponseDto {
+  const numericValue = Number(procedure.valorPadrao ?? 0);
   const base: ProcedureResponseDto = {
     id: procedure.id,
     nome: procedure.nome,
     descricao: procedure.descricao ?? '',
-    valorPadrao: Number(procedure.valorPadrao),
+    valorPadrao: numericValue,
+    precoPadrao: numericValue,
     duracaoMinutos: procedure.duracaoMinutos,
     categoria: procedure.categoria ?? 'Geral',
     isActive: procedure.isActive,

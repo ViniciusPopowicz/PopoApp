@@ -111,34 +111,84 @@ export const productQuerySchema = z.object({
 
 export type ProductQueryInput = z.infer<typeof productQuerySchema>;
 
-export const createLotSchema = z.object({
-  numeroLote: z
-    .string({ required_error: 'O número do lote é obrigatório' })
-    .trim()
-    .min(1, 'O número do lote é obrigatório')
-    .max(100, 'O número do lote não pode exceder 100 caracteres'),
+export const createLotSchema = z
+  .object({
+    numeroLote: z
+      .string({ required_error: 'O número do lote é obrigatório' })
+      .trim()
+      .min(1, 'O número do lote é obrigatório')
+      .max(100, 'O número do lote não pode exceder 100 caracteres')
+      .optional(),
+    codigoLote: z.string().trim().min(1).max(100).optional(),
 
-  dataValidade: coerceDate,
-  dataAquisicao: coerceDate,
-  precoCusto: coercePositiveDecimal,
-  observacoes: z.string().trim().max(1000).nullable().optional(),
+    dataValidade: coerceDate,
+    dataAquisicao: coerceDate,
+    dataCompra: coerceDate,
+    precoCusto: coercePositiveDecimal,
+    custoTotal: coercePositiveDecimal,
+    fornecedor: z.string().trim().max(200).nullable().optional(),
+    observacoes: z.string().trim().max(1000).nullable().optional(),
 
-  quantidadeInicial: z.coerce
-    .number()
-    .min(0, 'A quantidade não pode ser negativa')
-    .max(1000000, 'A quantidade inicial excede o limite permitido')
-    .optional()
-    .default(0),
+    quantidadeInicial: z.coerce
+      .number()
+      .min(0, 'A quantidade não pode ser negativa')
+      .max(1000000, 'A quantidade inicial excede o limite permitido')
+      .optional(),
 
-  quantidadeDisponivel: z.coerce
-    .number()
-    .min(0, 'A quantidade disponível não pode ser negativa')
-    .optional(),
+    quantidadeOriginal: z.coerce
+      .number()
+      .min(0, 'A quantidade não pode ser negativa')
+      .max(1000000, 'A quantidade inicial excede o limite permitido')
+      .optional(),
 
-  codigosSeriais: z.array(z.string().trim().min(1)).optional(),
-});
+    quantidadeDisponivel: z.coerce
+      .number()
+      .min(0, 'A quantidade disponível não pode ser negativa')
+      .optional(),
 
-export type CreateLotInput = z.input<typeof createLotSchema>;
+    codigosSeriais: z.array(z.string().trim().min(1)).optional(),
+  })
+  .refine((data) => Boolean((data.numeroLote && data.numeroLote.trim()) || (data.codigoLote && data.codigoLote.trim())), {
+    message: 'O número do lote é obrigatório',
+    path: ['numeroLote'],
+  })
+  .transform((data) => {
+    const numeroLote = (data.numeroLote || data.codigoLote || '').trim();
+    const dataAquisicao = data.dataAquisicao != null ? data.dataAquisicao : data.dataCompra;
+    const precoCusto = data.precoCusto != null ? data.precoCusto : data.custoTotal;
+    const quantidadeInicial =
+      data.quantidadeInicial !== undefined
+        ? data.quantidadeInicial
+        : data.quantidadeOriginal !== undefined
+        ? data.quantidadeOriginal
+        : 0;
+    let observacoes = data.observacoes ?? null;
+    if (data.fornecedor && data.fornecedor.trim()) {
+      const forn = `Fornecedor: ${data.fornecedor.trim()}`;
+      observacoes = observacoes ? `${forn} | ${observacoes}` : forn;
+    }
+    return {
+      numeroLote,
+      dataValidade: data.dataValidade,
+      dataAquisicao,
+      precoCusto,
+      observacoes,
+      quantidadeInicial,
+      quantidadeDisponivel: data.quantidadeDisponivel,
+      codigosSeriais: data.codigosSeriais,
+    };
+  });
+
+export interface CreateLotInput {
+  numeroLote: string;
+  dataValidade?: Date | string | null;
+  dataAquisicao?: Date | string | null;
+  precoCusto?: number | string | null;
+  observacoes?: string | null;
+  quantidadeInicial?: number;
+  quantidadeDisponivel?: number;
+  codigosSeriais?: string[];
+}
 
 export const registerUnitsSchema = z
   .object({
@@ -208,14 +258,20 @@ export const correctProductUsageSchema = z.object({
 
 export type CorrectProductUsageInput = z.infer<typeof correctProductUsageSchema>;
 
-export const updateStockUnitStatusSchema = z.object({
-  status: z.enum(['Disponivel', 'EmUso', 'Esgotado', 'Descartado'], {
-    required_error: 'O status da unidade é obrigatório',
-  }),
-  motivo: z.string().trim().max(500).optional(),
-});
+export const updateStockUnitStatusSchema = z
+  .object({
+    status: z.enum(['Disponivel', 'EmUso', 'Esgotado', 'Descartado'], {
+      required_error: 'O status da unidade é obrigatório',
+    }),
+    motivo: z.string().trim().max(500).nullable().optional(),
+    motivoStatus: z.string().trim().max(500).nullable().optional(),
+  })
+  .transform((data) => ({
+    status: data.status,
+    motivo: (data.motivo ?? data.motivoStatus) || undefined,
+  }));
 
-export type UpdateStockUnitStatusInput = z.infer<typeof updateStockUnitStatusSchema>;
+export type UpdateStockUnitStatusInput = z.input<typeof updateStockUnitStatusSchema>;
 
 export const stockAdjustmentSchema = z.object({
   productId: z.string().uuid('ID do produto inválido').optional(),

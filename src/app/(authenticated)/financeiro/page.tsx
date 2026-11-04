@@ -5,11 +5,14 @@ import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { EmptyState } from '@/components/shared/empty-state';
+import { ListingToolbar } from '@/components/shared/listing-toolbar';
+import { AppCombobox } from '@/components/ui/app-combobox';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
@@ -31,7 +34,6 @@ import {
   Banknote,
   QrCode,
   FileText,
-  Filter,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -41,8 +43,18 @@ import {
   RotateCcw,
   XCircle,
   Wallet,
+  Search,
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/format';
+import {
+  maskCurrencyBRL,
+  unmaskCurrencyBRL,
+  formatNumberToBRLInput,
+  maskDateBR,
+  dateBRToISO,
+  isoToDateBR,
+} from '@/lib/masks';
+import { useDebounce } from '@/hooks/use-debounce';
 import { PAYMENT_METHOD_LABELS } from '@/types/payment';
 import { FinancialObligationDto, FinancialMovementDto } from '@/types/financial';
 
@@ -131,8 +143,55 @@ interface TransactionItem {
   }>;
 }
 
+const PERIOD_OPTIONS = [
+  { value: 'today', label: 'Hoje' },
+  { value: 'week', label: 'Esta Semana' },
+  { value: 'month', label: 'Este Mês' },
+  { value: 'year', label: 'Este Ano' },
+  { value: 'custom', label: 'Personalizado' },
+];
+
+const TX_STATUS_OPTIONS = [
+  { value: 'ALL', label: 'Todos Status' },
+  { value: 'Pago', label: 'Pago' },
+  { value: 'Pendente', label: 'Pendente' },
+  { value: 'Atrasado', label: 'Atrasado' },
+  { value: 'Cancelado', label: 'Cancelado' },
+];
+
+const PAYMENT_METHOD_FILTER_OPTIONS = [
+  { value: 'ALL', label: 'Todos Meios' },
+  { value: 'Pix', label: 'PIX' },
+  { value: 'CartaoCredito', label: 'Cartão de Crédito' },
+  { value: 'CartaoDebito', label: 'Cartão de Débito' },
+  { value: 'Dinheiro', label: 'Dinheiro' },
+  { value: 'Transferencia', label: 'Transferência' },
+];
+
+const PAYMENT_METHOD_SELECT_OPTIONS = [
+  { value: 'Pix', label: 'PIX' },
+  { value: 'CartaoCredito', label: 'Cartão de Crédito' },
+  { value: 'CartaoDebito', label: 'Cartão de Débito' },
+  { value: 'Dinheiro', label: 'Dinheiro' },
+  { value: 'Transferencia', label: 'Transferência / Boleto' },
+];
+
+const FINANCIAL_CATEGORY_OPTIONS = [
+  { value: 'Insumos / Fornecedores', label: 'Insumos / Fornecedores' },
+  { value: 'Cobrança Clínica', label: 'Cobrança Clínica' },
+  { value: 'Aluguel / Condomínio', label: 'Aluguel / Condomínio' },
+  { value: 'Despesas Gerais', label: 'Despesas Gerais' },
+  { value: 'Marketing', label: 'Marketing' },
+  { value: 'Impostos / Taxas', label: 'Impostos / Taxas' },
+  { value: 'Equipamentos', label: 'Equipamentos' },
+];
+
 export default function FinanceiroPage() {
   const [activeTab, setActiveTab] = useState<'visao_geral' | 'receber' | 'pagar' | 'movimentacoes'>('visao_geral');
+
+  // Search State (Debounced 350ms)
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const debouncedSearch = useDebounce(searchTerm, 350);
 
   // Summary State
   const [period, setPeriod] = useState<string>('month');
@@ -162,18 +221,23 @@ export default function FinanceiroPage() {
   const [obDescricao, setObDescricao] = useState('');
   const [obCategoria, setObCategoria] = useState('');
   const [obFornecedor, setObFornecedor] = useState('');
-  const [obValor, setObValor] = useState('');
-  const [obVencimento, setObVencimento] = useState(() => new Date().toISOString().split('T')[0]);
+  const [obValorDisplay, setObValorDisplay] = useState('');
+  const [obVencimentoDisplay, setObVencimentoDisplay] = useState(() =>
+    isoToDateBR(new Date().toISOString().split('T')[0])
+  );
   const [obMetodo, setObMetodo] = useState('Pix');
+  const [obJaPago, setObJaPago] = useState<boolean>(false);
   const [obObservacoes, setObObservacoes] = useState('');
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<boolean>(false);
 
   // Settle Dialog State
   const [settleTarget, setSettleTarget] = useState<FinancialObligationDto | null>(null);
-  const [settleValor, setSettleValor] = useState('');
+  const [settleValorDisplay, setSettleValorDisplay] = useState('');
   const [settleMetodo, setSettleMetodo] = useState('Pix');
-  const [settleData, setSettleData] = useState(() => new Date().toISOString().split('T')[0]);
+  const [settleDataDisplay, setSettleDataDisplay] = useState(() =>
+    isoToDateBR(new Date().toISOString().split('T')[0])
+  );
   const [settleObs, setSettleObs] = useState('');
 
   // Manual Movement Dialog State
@@ -181,9 +245,11 @@ export default function FinanceiroPage() {
   const [movTipo, setMovTipo] = useState<'ENTRADA' | 'SAIDA'>('SAIDA');
   const [movDescricao, setMovDescricao] = useState('');
   const [movCategoria, setMovCategoria] = useState('');
-  const [movValor, setMovValor] = useState('');
+  const [movValorDisplay, setMovValorDisplay] = useState('');
   const [movMetodo, setMovMetodo] = useState('Pix');
-  const [movData, setMovData] = useState(() => new Date().toISOString().split('T')[0]);
+  const [movDataDisplay, setMovDataDisplay] = useState(() =>
+    isoToDateBR(new Date().toISOString().split('T')[0])
+  );
 
   const [error, setError] = useState<string | null>(null);
 
@@ -195,8 +261,10 @@ export default function FinanceiroPage() {
       const params = new URLSearchParams();
       params.set('period', period);
       if (period === 'custom') {
-        if (customStart) params.set('startDate', new Date(customStart).toISOString());
-        if (customEnd) params.set('endDate', new Date(customEnd).toISOString());
+        const isoStart = dateBRToISO(customStart);
+        const isoEnd = dateBRToISO(customEnd);
+        if (isoStart) params.set('startDate', new Date(`${isoStart}T00:00:00`).toISOString());
+        if (isoEnd) params.set('endDate', new Date(`${isoEnd}T23:59:59`).toISOString());
       }
 
       const res = await fetch(`/api/financial/summary?${params.toString()}`);
@@ -224,6 +292,7 @@ export default function FinanceiroPage() {
       params.set('limit', '15');
       if (txStatus !== 'ALL') params.set('status', txStatus);
       if (txMethod !== 'ALL') params.set('metodo', txMethod);
+      if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
 
       const res = await fetch(`/api/financial/transactions?${params.toString()}`);
       const json = await res.json();
@@ -241,15 +310,19 @@ export default function FinanceiroPage() {
     } finally {
       setLoadingTx(false);
     }
-  }, [page, txStatus, txMethod]);
+  }, [page, txStatus, txMethod, debouncedSearch]);
 
   const fetchObligationsAndMovements = useCallback(async () => {
     try {
       setLoadingObligations(true);
+      const searchParam = debouncedSearch.trim()
+        ? `&search=${encodeURIComponent(debouncedSearch.trim())}`
+        : '';
+
       const [recRes, payRes, movRes] = await Promise.all([
-        fetch('/api/financial/obligations?tipo=RECEIVABLE&limit=100'),
-        fetch('/api/financial/obligations?tipo=PAYABLE&limit=100'),
-        fetch('/api/financial/movements?limit=100'),
+        fetch(`/api/financial/obligations?tipo=RECEIVABLE&limit=100${searchParam}`),
+        fetch(`/api/financial/obligations?tipo=PAYABLE&limit=100${searchParam}`),
+        fetch(`/api/financial/movements?limit=100${searchParam}`),
       ]);
 
       const [recJson, payJson, movJson] = await Promise.all([
@@ -266,10 +339,12 @@ export default function FinanceiroPage() {
     } finally {
       setLoadingObligations(false);
     }
-  }, []);
+  }, [debouncedSearch]);
 
   useEffect(() => {
-    if (period !== 'custom' || (customStart && customEnd)) {
+    const isoStart = dateBRToISO(customStart);
+    const isoEnd = dateBRToISO(customEnd);
+    if (period !== 'custom' || (isoStart && isoEnd)) {
       fetchSummary();
     }
   }, [period, customStart, customEnd, fetchSummary]);
@@ -293,9 +368,10 @@ export default function FinanceiroPage() {
     setObDescricao('');
     setObCategoria(tipo === 'PAYABLE' ? 'Insumos / Fornecedores' : 'Cobrança Clínica');
     setObFornecedor('');
-    setObValor('');
-    setObVencimento(new Date().toISOString().split('T')[0]);
+    setObValorDisplay('');
+    setObVencimentoDisplay(isoToDateBR(new Date().toISOString().split('T')[0]));
     setObMetodo('Pix');
+    setObJaPago(false);
     setObObservacoes('');
     setDialogError(null);
     setShowObligationDialog(true);
@@ -306,6 +382,15 @@ export default function FinanceiroPage() {
     try {
       setSubmitting(true);
       setDialogError(null);
+      const rawValor = unmaskCurrencyBRL(obValorDisplay);
+      if (!rawValor || rawValor <= 0) {
+        throw new Error('Informe um valor válido maior que zero.');
+      }
+      const isoVencimento = dateBRToISO(obVencimentoDisplay);
+      if (!isoVencimento) {
+        throw new Error('Informe uma data de vencimento válida (DD/MM/AAAA).');
+      }
+
       const res = await fetch('/api/financial/obligations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -314,9 +399,11 @@ export default function FinanceiroPage() {
           descricao: obDescricao,
           categoria: obCategoria || null,
           fornecedor: obFornecedor || null,
-          valorOriginal: Number(obValor),
-          dataVencimento: new Date(obVencimento + 'T12:00:00').toISOString(),
+          valorOriginal: rawValor,
+          dataVencimento: new Date(isoVencimento + 'T12:00:00').toISOString(),
           metodo: obMetodo || null,
+          status: obJaPago ? 'Pago' : undefined,
+          dataPagamento: obJaPago ? new Date(isoVencimento + 'T12:00:00').toISOString() : undefined,
           observacoes: obObservacoes || null,
         }),
       });
@@ -335,9 +422,9 @@ export default function FinanceiroPage() {
 
   const handleOpenSettle = (ob: FinancialObligationDto) => {
     setSettleTarget(ob);
-    setSettleValor(String(ob.remainingBalance));
+    setSettleValorDisplay(formatNumberToBRLInput(ob.remainingBalance));
     setSettleMetodo(ob.metodo || 'Pix');
-    setSettleData(new Date().toISOString().split('T')[0]);
+    setSettleDataDisplay(isoToDateBR(new Date().toISOString().split('T')[0]));
     setSettleObs('');
     setDialogError(null);
   };
@@ -348,13 +435,22 @@ export default function FinanceiroPage() {
     try {
       setSubmitting(true);
       setDialogError(null);
+      const rawValor = unmaskCurrencyBRL(settleValorDisplay);
+      if (!rawValor || rawValor <= 0) {
+        throw new Error('Informe um valor válido para liquidação.');
+      }
+      const isoData = dateBRToISO(settleDataDisplay);
+      if (!isoData) {
+        throw new Error('Informe uma data de liquidação válida (DD/MM/AAAA).');
+      }
+
       const res = await fetch(`/api/financial/obligations/${settleTarget.id}/settle`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          valor: Number(settleValor),
+          valor: rawValor,
           metodo: settleMetodo,
-          dataLiquidacao: new Date(settleData + 'T12:00:00').toISOString(),
+          dataLiquidacao: new Date(isoData + 'T12:00:00').toISOString(),
           observacoes: settleObs || null,
         }),
       });
@@ -403,6 +499,15 @@ export default function FinanceiroPage() {
     try {
       setSubmitting(true);
       setDialogError(null);
+      const rawValor = unmaskCurrencyBRL(movValorDisplay);
+      if (!rawValor || rawValor <= 0) {
+        throw new Error('Informe um valor válido maior que zero.');
+      }
+      const isoData = dateBRToISO(movDataDisplay);
+      if (!isoData) {
+        throw new Error('Informe uma data válida (DD/MM/AAAA).');
+      }
+
       const res = await fetch('/api/financial/movements', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -410,9 +515,9 @@ export default function FinanceiroPage() {
           tipo: movTipo,
           descricao: movDescricao,
           categoria: movCategoria || null,
-          valor: Number(movValor),
+          valor: rawValor,
           metodo: movMetodo,
-          dataMovimentacao: new Date(movData + 'T12:00:00').toISOString(),
+          dataMovimentacao: new Date(isoData + 'T12:00:00').toISOString(),
         }),
       });
       const json = await res.json();
@@ -422,7 +527,7 @@ export default function FinanceiroPage() {
       setShowMovementDialog(false);
       setMovDescricao('');
       setMovCategoria('');
-      setMovValor('');
+      setMovValorDisplay('');
       refreshAll();
     } catch (err: any) {
       setDialogError(err.message || 'Erro ao salvar movimentação.');
@@ -484,70 +589,44 @@ export default function FinanceiroPage() {
           description="Controle completo de fluxo de caixa, contas a receber, contas a pagar e transações."
         />
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => handleOpenCreateObligation('RECEIVABLE')}>
-            <Plus className="h-4 w-4 mr-1" />
-            Nova Conta a Receber
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => handleOpenCreateObligation('PAYABLE')}>
-            <Plus className="h-4 w-4 mr-1" />
-            Nova Despesa / Pagar
-          </Button>
+        <div className="flex flex-wrap items-center gap-2 bg-card p-1.5 rounded-lg border">
+          <AppCombobox
+            value={period}
+            onValueChange={setPeriod}
+            options={PERIOD_OPTIONS}
+            placeholder="Período"
+            searchable={false}
+            className="w-[160px]"
+          />
+
+          {period === 'custom' && (
+            <div className="flex items-center gap-1.5">
+              <DatePicker
+                placeholder="DD/MM/AAAA"
+                value={customStart}
+                onChange={setCustomStart}
+                className="w-32"
+              />
+              <span className="text-xs text-muted-foreground">até</span>
+              <DatePicker
+                placeholder="DD/MM/AAAA"
+                value={customEnd}
+                onChange={setCustomEnd}
+                className="w-32"
+              />
+            </div>
+          )}
+
           <Button
-            variant="default"
-            size="sm"
-            onClick={() => {
-              setDialogError(null);
-              setShowMovementDialog(true);
-            }}
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9"
+            onClick={refreshAll}
+            disabled={loadingSummary}
+            title="Atualizar"
           >
-            <Wallet className="h-4 w-4 mr-1" />
-            Lançamento Manual
+            <RefreshCw className={`h-4 w-4 ${loadingSummary ? 'animate-spin' : ''}`} />
           </Button>
-
-          <div className="flex items-center gap-2 bg-card p-1.5 rounded-lg border">
-            <Select value={period} onValueChange={setPeriod}>
-              <SelectTrigger className="w-[150px] h-8 text-xs">
-                <SelectValue placeholder="Período" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="today">Hoje</SelectItem>
-                <SelectItem value="week">Esta Semana</SelectItem>
-                <SelectItem value="month">Este Mês</SelectItem>
-                <SelectItem value="year">Este Ano</SelectItem>
-                <SelectItem value="custom">Personalizado</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {period === 'custom' && (
-              <div className="flex items-center gap-1.5">
-                <Input
-                  type="date"
-                  value={customStart}
-                  onChange={(e) => setCustomStart(e.target.value)}
-                  className="h-8 text-xs w-32"
-                />
-                <span className="text-xs text-muted-foreground">até</span>
-                <Input
-                  type="date"
-                  value={customEnd}
-                  onChange={(e) => setCustomEnd(e.target.value)}
-                  className="h-8 text-xs w-32"
-                />
-              </div>
-            )}
-
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={refreshAll}
-              disabled={loadingSummary}
-              title="Atualizar"
-            >
-              <RefreshCw className={`h-4 w-4 ${loadingSummary ? 'animate-spin' : ''}`} />
-            </Button>
-          </div>
         </div>
       </div>
 
@@ -652,6 +731,74 @@ export default function FinanceiroPage() {
           </TabsTrigger>
           <TabsTrigger value="movimentacoes">Livro Caixa ({movementsList.length})</TabsTrigger>
         </TabsList>
+
+        {/* Global ListingToolbar positioned directly above the listings */}
+        <ListingToolbar
+          left={
+            <div className="relative w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por cliente, descrição, categoria ou fornecedor..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setPage(1);
+                }}
+                className="pl-9"
+              />
+            </div>
+          }
+          right={
+            <>
+              {activeTab === 'visao_geral' && (
+                <>
+                  <AppCombobox
+                    value={txStatus}
+                    onValueChange={(v) => {
+                      setTxStatus(v);
+                      setPage(1);
+                    }}
+                    options={TX_STATUS_OPTIONS}
+                    placeholder="Status"
+                    searchable={false}
+                    className="w-[150px]"
+                  />
+                  <AppCombobox
+                    value={txMethod}
+                    onValueChange={(v) => {
+                      setTxMethod(v);
+                      setPage(1);
+                    }}
+                    options={PAYMENT_METHOD_FILTER_OPTIONS}
+                    placeholder="Meio de Pagto"
+                    searchable={false}
+                    className="w-[170px]"
+                  />
+                </>
+              )}
+
+              <Button variant="outline" size="sm" onClick={() => handleOpenCreateObligation('RECEIVABLE')}>
+                <Plus className="h-4 w-4 mr-1" />
+                Nova Conta a Receber
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => handleOpenCreateObligation('PAYABLE')}>
+                <Plus className="h-4 w-4 mr-1" />
+                Nova Conta a Pagar
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => {
+                  setDialogError(null);
+                  setShowMovementDialog(true);
+                }}
+              >
+                <Wallet className="h-4 w-4 mr-1" />
+                Lançamento Manual
+              </Button>
+            </>
+          }
+        />
 
         {/* TAB 1: VISÃO GERAL & TRANSAÇÕES */}
         <TabsContent value="visao_geral" className="space-y-6">
@@ -767,60 +914,14 @@ export default function FinanceiroPage() {
 
           {/* Attendance Payments Ledger */}
           <Card>
-            <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-primary" />
-                  <span>Pagamentos de Atendimentos</span>
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Histórico detalhado de pagamentos registrados nos atendimentos ({totalTx} registros).
-                </CardDescription>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-1.5">
-                  <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-                  <Select
-                    value={txStatus}
-                    onValueChange={(v) => {
-                      setTxStatus(v);
-                      setPage(1);
-                    }}
-                  >
-                    <SelectTrigger className="w-[130px] h-8 text-xs">
-                      <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ALL">Todos Status</SelectItem>
-                      <SelectItem value="Pago">Pago</SelectItem>
-                      <SelectItem value="Pendente">Pendente</SelectItem>
-                      <SelectItem value="Atrasado">Atrasado</SelectItem>
-                      <SelectItem value="Cancelado">Cancelado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <Select
-                  value={txMethod}
-                  onValueChange={(v) => {
-                    setTxMethod(v);
-                    setPage(1);
-                  }}
-                >
-                  <SelectTrigger className="w-[150px] h-8 text-xs">
-                    <SelectValue placeholder="Meio de Pagto" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ALL">Todos Meios</SelectItem>
-                    <SelectItem value="Pix">PIX</SelectItem>
-                    <SelectItem value="CartaoCredito">Cartão de Crédito</SelectItem>
-                    <SelectItem value="CartaoDebito">Cartão de Débito</SelectItem>
-                    <SelectItem value="Dinheiro">Dinheiro</SelectItem>
-                    <SelectItem value="Transferencia">Transferência</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileText className="h-4 w-4 text-primary" />
+                <span>Pagamentos de Atendimentos</span>
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Histórico detalhado de pagamentos registrados nos atendimentos ({totalTx} registros).
+              </CardDescription>
             </CardHeader>
 
             <CardContent>
@@ -943,17 +1044,11 @@ export default function FinanceiroPage() {
         {/* TAB 2: CONTAS A RECEBER */}
         <TabsContent value="receber">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-base">Contas a Receber</CardTitle>
-                <CardDescription className="text-xs">
-                  Cobranças de clientes, agendamentos ou atendimentos com suporte a baixa parcial e total.
-                </CardDescription>
-              </div>
-              <Button size="sm" onClick={() => handleOpenCreateObligation('RECEIVABLE')}>
-                <Plus className="h-4 w-4 mr-1" />
-                Nova Conta a Receber
-              </Button>
+            <CardHeader>
+              <CardTitle className="text-base">Contas a Receber</CardTitle>
+              <CardDescription className="text-xs">
+                Cobranças de clientes, agendamentos ou atendimentos com suporte a baixa parcial e total.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {loadingObligations ? (
@@ -1039,17 +1134,11 @@ export default function FinanceiroPage() {
         {/* TAB 3: CONTAS A PAGAR */}
         <TabsContent value="pagar">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-base">Contas a Pagar (Despesas da Clínica)</CardTitle>
-                <CardDescription className="text-xs">
-                  Controle de fornecedores, aluguel, insumos e obrigações operacionais.
-                </CardDescription>
-              </div>
-              <Button size="sm" onClick={() => handleOpenCreateObligation('PAYABLE')}>
-                <Plus className="h-4 w-4 mr-1" />
-                Nova Conta a Pagar
-              </Button>
+            <CardHeader>
+              <CardTitle className="text-base">Contas a Pagar (Despesas da Clínica)</CardTitle>
+              <CardDescription className="text-xs">
+                Controle de fornecedores, aluguel, insumos e obrigações operacionais.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {loadingObligations ? (
@@ -1135,17 +1224,11 @@ export default function FinanceiroPage() {
         {/* TAB 4: LIVRO CAIXA (FINANCIAL MOVEMENTS) */}
         <TabsContent value="movimentacoes">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-base">Livro Caixa (Entradas e Saídas Efetivas)</CardTitle>
-                <CardDescription className="text-xs">
-                  Movimentações financeiras ordenadas pela data efetiva de entrada ou saída de caixa.
-                </CardDescription>
-              </div>
-              <Button size="sm" onClick={() => setShowMovementDialog(true)}>
-                <Plus className="h-4 w-4 mr-1" />
-                Lançamento Manual
-              </Button>
+            <CardHeader>
+              <CardTitle className="text-base">Livro Caixa (Entradas e Saídas Efetivas)</CardTitle>
+              <CardDescription className="text-xs">
+                Movimentações financeiras ordenadas pela data efetiva de entrada ou saída de caixa.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {loadingObligations ? (
@@ -1256,10 +1339,12 @@ export default function FinanceiroPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Categoria</Label>
-                <Input
+                <AppCombobox
                   value={obCategoria}
-                  onChange={(e) => setObCategoria(e.target.value)}
-                  placeholder="Ex.: Insumos, Aluguel"
+                  onValueChange={setObCategoria}
+                  options={FINANCIAL_CATEGORY_OPTIONS}
+                  placeholder="Selecione ou digite..."
+                  creatable
                 />
               </div>
               {obligationDialogType === 'PAYABLE' && (
@@ -1277,39 +1362,47 @@ export default function FinanceiroPage() {
               <div className="space-y-1.5">
                 <Label>Valor (R$) *</Label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="R$ 0,00"
                   required
-                  value={obValor}
-                  onChange={(e) => setObValor(e.target.value)}
+                  value={obValorDisplay}
+                  onChange={(e) => setObValorDisplay(maskCurrencyBRL(e.target.value))}
                 />
               </div>
               <div className="space-y-1.5">
                 <Label>Vencimento *</Label>
-                <Input
-                  type="date"
+                <DatePicker
                   required
-                  value={obVencimento}
-                  onChange={(e) => setObVencimento(e.target.value)}
+                  value={obVencimentoDisplay}
+                  onChange={setObVencimentoDisplay}
                 />
               </div>
               <div className="space-y-1.5">
                 <Label>Meio Previsto</Label>
-                <Select value={obMetodo} onValueChange={setObMetodo}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Pix">PIX</SelectItem>
-                    <SelectItem value="CartaoCredito">Cartão de Crédito</SelectItem>
-                    <SelectItem value="CartaoDebito">Cartão de Débito</SelectItem>
-                    <SelectItem value="Dinheiro">Dinheiro</SelectItem>
-                    <SelectItem value="Transferencia">Transferência / Boleto</SelectItem>
-                  </SelectContent>
-                </Select>
+                <AppCombobox
+                  value={obMetodo}
+                  onValueChange={setObMetodo}
+                  options={PAYMENT_METHOD_SELECT_OPTIONS}
+                  searchable={false}
+                />
               </div>
             </div>
+            {obligationDialogType === 'PAYABLE' && (
+              <div className="flex items-center space-x-2 pt-1">
+                <Checkbox
+                  id="obJaPago"
+                  checked={obJaPago}
+                  onCheckedChange={(c) => setObJaPago(Boolean(c))}
+                />
+                <label
+                  htmlFor="obJaPago"
+                  className="text-sm font-medium leading-none cursor-pointer"
+                >
+                  Despesa já paga (Realizada no Caixa)
+                </label>
+              </div>
+            )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowObligationDialog(false)}>
                 Cancelar
@@ -1340,38 +1433,30 @@ export default function FinanceiroPage() {
               <div className="space-y-1.5">
                 <Label>Valor da Baixa (R$) *</Label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  max={settleTarget?.remainingBalance}
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="R$ 0,00"
                   required
-                  value={settleValor}
-                  onChange={(e) => setSettleValor(e.target.value)}
+                  value={settleValorDisplay}
+                  onChange={(e) => setSettleValorDisplay(maskCurrencyBRL(e.target.value))}
                 />
               </div>
               <div className="space-y-1.5">
                 <Label>Data da Liquidação *</Label>
-                <Input
-                  type="date"
+                <DatePicker
                   required
-                  value={settleData}
-                  onChange={(e) => setSettleData(e.target.value)}
+                  value={settleDataDisplay}
+                  onChange={setSettleDataDisplay}
                 />
               </div>
               <div className="space-y-1.5">
                 <Label>Meio de Pagamento *</Label>
-                <Select value={settleMetodo} onValueChange={setSettleMetodo}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Pix">PIX</SelectItem>
-                    <SelectItem value="CartaoCredito">Cartão de Crédito</SelectItem>
-                    <SelectItem value="CartaoDebito">Cartão de Débito</SelectItem>
-                    <SelectItem value="Dinheiro">Dinheiro</SelectItem>
-                    <SelectItem value="Transferencia">Transferência</SelectItem>
-                  </SelectContent>
-                </Select>
+                <AppCombobox
+                  value={settleMetodo}
+                  onValueChange={setSettleMetodo}
+                  options={PAYMENT_METHOD_SELECT_OPTIONS}
+                  searchable={false}
+                />
               </div>
             </div>
             <DialogFooter>
@@ -1402,22 +1487,24 @@ export default function FinanceiroPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Tipo de Movimento *</Label>
-                <Select value={movTipo} onValueChange={(v) => setMovTipo(v as 'ENTRADA' | 'SAIDA')}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ENTRADA">Entrada (Receita Avulsa)</SelectItem>
-                    <SelectItem value="SAIDA">Saída (Despesa Imediata)</SelectItem>
-                  </SelectContent>
-                </Select>
+                <AppCombobox
+                  value={movTipo}
+                  onValueChange={(v) => setMovTipo(v as 'ENTRADA' | 'SAIDA')}
+                  options={[
+                    { value: 'ENTRADA', label: 'Entrada (Receita Avulsa)' },
+                    { value: 'SAIDA', label: 'Saída (Despesa Imediata)' },
+                  ]}
+                  searchable={false}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>Categoria</Label>
-                <Input
+                <AppCombobox
                   value={movCategoria}
-                  onChange={(e) => setMovCategoria(e.target.value)}
-                  placeholder="Ex.: Despesas Gerais, Suprimentos"
+                  onValueChange={setMovCategoria}
+                  options={FINANCIAL_CATEGORY_OPTIONS}
+                  placeholder="Selecione ou digite..."
+                  creatable
                 />
               </div>
             </div>
@@ -1434,37 +1521,30 @@ export default function FinanceiroPage() {
               <div className="space-y-1.5">
                 <Label>Valor (R$) *</Label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="R$ 0,00"
                   required
-                  value={movValor}
-                  onChange={(e) => setMovValor(e.target.value)}
+                  value={movValorDisplay}
+                  onChange={(e) => setMovValorDisplay(maskCurrencyBRL(e.target.value))}
                 />
               </div>
               <div className="space-y-1.5">
                 <Label>Data *</Label>
-                <Input
-                  type="date"
+                <DatePicker
                   required
-                  value={movData}
-                  onChange={(e) => setMovData(e.target.value)}
+                  value={movDataDisplay}
+                  onChange={setMovDataDisplay}
                 />
               </div>
               <div className="space-y-1.5">
                 <Label>Meio *</Label>
-                <Select value={movMetodo} onValueChange={setMovMetodo}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Pix">PIX</SelectItem>
-                    <SelectItem value="Dinheiro">Dinheiro</SelectItem>
-                    <SelectItem value="CartaoCredito">Cartão de Crédito</SelectItem>
-                    <SelectItem value="CartaoDebito">Cartão de Débito</SelectItem>
-                    <SelectItem value="Transferencia">Transferência</SelectItem>
-                  </SelectContent>
-                </Select>
+                <AppCombobox
+                  value={movMetodo}
+                  onValueChange={setMovMetodo}
+                  options={PAYMENT_METHOD_SELECT_OPTIONS}
+                  searchable={false}
+                />
               </div>
             </div>
             <DialogFooter>

@@ -426,7 +426,9 @@ export class ReminderService {
     });
 
     if (created.isActive) {
-      await this.generateDueOccurrencesForRecurrence(created.id, referenceDate);
+      const initialEffectiveHorizon =
+        referenceDate > new Date(input.dataInicio) ? referenceDate : new Date(input.dataInicio);
+      await this.generateDueOccurrencesForRecurrence(created.id, initialEffectiveHorizon);
     }
 
     return this.getRecurrenceById(created.id);
@@ -742,9 +744,18 @@ export class ReminderService {
   }
 
   /**
-   * Lists reminders with comprehensive filtering, status tabs, and overdue detection.
+   * Lists reminders with comprehensive filtering, status tabs, search, date filter, and overdue detection.
    */
   static async listReminders(query: ReminderQueryParams): Promise<ReminderDto[]> {
+    const { ensureDatabaseSchema } = await import('@/lib/db-bootstrap');
+    await ensureDatabaseSchema();
+
+    try {
+      await this.syncPixInstallmentReminders();
+    } catch {
+      // Non-fatal if sync encounters partial data
+    }
+
     const now = new Date();
     const where: Prisma.ReminderWhereInput = {};
 
@@ -755,6 +766,15 @@ export class ReminderService {
     if (query.recurrenceId) where.recurrenceId = query.recurrenceId;
     if (query.prioridade) where.prioridade = query.prioridade;
     if (query.tipo) where.tipo = query.tipo;
+
+    if (query.search && query.search.trim()) {
+      const term = query.search.trim();
+      where.OR = [
+        { titulo: { contains: term } },
+        { descricao: { contains: term } },
+        { client: { nome: { contains: term } } },
+      ];
+    }
 
     // Status & overdue filtering
     if (query.status === 'atrasado' || query.overdueOnly) {
@@ -779,20 +799,64 @@ export class ReminderService {
       where.dataVencimento = { gte: now, lte: futureLimit };
     }
 
-    if (query.startDate || query.endDate) {
+    if (query.date && /^\d{4}-\d{2}-\d{2}$/.test(query.date.trim())) {
+      const [y, m, d] = query.date.trim().split('-').map(Number);
+      const dayStart = new Date(y, m - 1, d, 0, 0, 0, 0);
+      const dayEnd = new Date(y, m - 1, d, 23, 59, 59, 999);
+      where.dataVencimento = { gte: dayStart, lte: dayEnd };
+    } else if (query.startDate || query.endDate) {
+      const gteDate = query.startDate ? new Date(query.startDate) : undefined;
+      const lteDate = query.endDate ? new Date(query.endDate) : undefined;
+      if (lteDate && query.endDate && /^\d{4}-\d{2}-\d{2}$/.test(query.endDate.trim())) {
+        lteDate.setHours(23, 59, 59, 999);
+      }
       where.dataVencimento = {
-        ...(query.startDate ? { gte: new Date(query.startDate) } : {}),
-        ...(query.endDate ? { lte: new Date(query.endDate) } : {}),
+        ...(gteDate && !isNaN(gteDate.getTime()) ? { gte: gteDate } : {}),
+        ...(lteDate && !isNaN(lteDate.getTime()) ? { lte: lteDate } : {}),
       };
     }
 
-    const items = await prisma.reminder.findMany({
-      where,
-      include: this.defaultReminderInclude,
-      orderBy: [{ dataVencimento: 'asc' }, { createdAt: 'desc' }],
-      take: query.limit ?? 50,
-      skip: query.offset ?? 0,
-    });
+    let items: any[] = [];
+    try {
+      items = await prisma.reminder.findMany({
+        where,
+        include: this.defaultReminderInclude,
+        orderBy: [{ dataVencimento: 'asc' }, { createdAt: 'desc' }],
+        take: query.limit ?? 50,
+        skip: query.offset ?? 0,
+      });
+    } catch {
+      const fallbackWhere: any = { ...where };
+      delete fallbackWhere.appointmentId;
+      delete fallbackWhere.attendanceId;
+      delete fallbackWhere.recurrenceId;
+      items = await prisma.reminder.findMany({
+        where: fallbackWhere,
+        select: {
+          id: true,
+          clientId: true,
+          pixInstallmentId: true,
+          titulo: true,
+          descricao: true,
+          dataVencimento: true,
+          prioridade: true,
+          status: true,
+          tipo: true,
+          completedAt: true,
+          createdAt: true,
+          updatedAt: true,
+          client: { select: { id: true, nome: true, cpf: true, telefone: true } },
+          pixInstallment: {
+            include: {
+              payment: { select: { id: true, attendanceId: true } },
+            },
+          },
+        },
+        orderBy: [{ dataVencimento: 'asc' }, { createdAt: 'desc' }],
+        take: query.limit ?? 50,
+        skip: query.offset ?? 0,
+      });
+    }
 
     return items.map((item) => this.formatReminderDto(item, now));
   }
@@ -982,7 +1046,8 @@ export class ReminderService {
 
     let generatedCount = 0;
     for (const inst of unlinkedInstallments) {
-      const clientId = inst.payment.attendance.clientId;
+      const clientId = inst.payment?.attendance?.clientId;
+      if (!clientId) continue;
       await this.generateRemindersForPixInstallments([inst], clientId);
       generatedCount++;
     }

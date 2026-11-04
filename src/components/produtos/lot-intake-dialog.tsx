@@ -1,33 +1,34 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertCircle, PackagePlus, CheckCircle2 } from 'lucide-react';
-
-export interface ProductSimpleItem {
-  id: string;
-  nome: string;
-  marca?: string | null;
-  unidade: string;
-  isReusable: boolean;
-}
+import { DatePicker } from '@/components/ui/date-picker';
+import { Badge } from '@/components/ui/badge';
+import { AppCombobox } from '@/components/ui/app-combobox';
+import {
+  maskCurrencyBRL,
+  unmaskCurrencyBRL,
+  maskDateBR,
+  dateBRToISO,
+  isoToDateBR,
+} from '@/lib/masks';
+import { Loader2, Layers, Info } from 'lucide-react';
+import { ProductSummaryDto } from '@/types/product';
 
 interface LotIntakeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  products: ProductSimpleItem[];
+  products: ProductSummaryDto[];
   preselectedProductId?: string | null;
   onSuccess: () => void;
 }
@@ -39,237 +40,303 @@ export function LotIntakeDialog({
   preselectedProductId,
   onSuccess,
 }: LotIntakeDialogProps) {
-  const [selectedProductId, setSelectedProductId] = useState<string>('');
-  const [numeroLote, setNumeroLote] = useState('');
-  const [dataValidade, setDataValidade] = useState('');
-  const [dataAquisicao, setDataAquisicao] = useState(
-    new Date().toISOString().split('T')[0]
-  );
-  const [precoCusto, setPrecoCusto] = useState('');
-  const [quantidadeInicial, setQuantidadeInicial] = useState('1');
+  const [productId, setProductId] = useState('');
+  const [codigoLote, setCodigoLote] = useState('');
+  const [fornecedor, setFornecedor] = useState('');
+  const [dataCompraMasked, setDataCompraMasked] = useState('');
+  const [dataValidadeMasked, setDataValidadeMasked] = useState('');
+  const [quantidadeOriginal, setQuantidadeOriginal] = useState<string>('1');
+  const [custoTotalMasked, setCustoTotalMasked] = useState<string>('');
   const [observacoes, setObservacoes] = useState('');
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (preselectedProductId) {
-      setSelectedProductId(preselectedProductId);
-    } else if (products.length > 0) {
-      setSelectedProductId((current) => (current ? current : products[0].id));
+    if (open) {
+      const todayIso = new Date().toISOString().split('T')[0];
+      setProductId(preselectedProductId || (products[0]?.id ?? ''));
+      setCodigoLote('');
+      setFornecedor('');
+      setDataCompraMasked(isoToDateBR(todayIso));
+      setDataValidadeMasked('');
+      setQuantidadeOriginal('1');
+      setCustoTotalMasked('');
+      setObservacoes('');
+      setError(null);
     }
-    setNumeroLote('');
-    setDataValidade('');
-    setDataAquisicao(new Date().toISOString().split('T')[0]);
-    setPrecoCusto('');
-    setQuantidadeInicial('1');
-    setObservacoes('');
-    setErrorMessage(null);
   }, [open, preselectedProductId, products]);
 
-  const currentProduct = products.find((p) => p.id === selectedProductId);
+  const selectedProduct = products.find((p) => p.id === productId);
+  const isQuantityMode = selectedProduct?.trackingMode === 'QUANTITY';
+  const qtyNumber = parseFloat(quantidadeOriginal) || 0;
+  const costNumber = unmaskCurrencyBRL(custoTotalMasked);
+  const unitCostPreview = qtyNumber > 0 && costNumber > 0 ? costNumber / qtyNumber : 0;
 
-  async function handleSubmit(e: React.FormEvent) {
+  const productOptions = products
+    .filter((p) => p.isActive || p.id === preselectedProductId)
+    .map((p) => ({
+      value: p.id,
+      label: `${p.nome}${p.marca ? ` (${p.marca})` : ''} — [${p.unidade}]`,
+      sublabel:
+        p.trackingMode === 'QUANTITY'
+          ? 'Rastreio por Quantidade'
+          : 'Rastreio por Unidade Física',
+    }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMessage(null);
+    setError(null);
 
-    if (!selectedProductId) {
-      setErrorMessage('Selecione o produto para a entrada de lote.');
+    if (!productId) {
+      setError('Selecione um produto.');
       return;
     }
 
-    if (!numeroLote.trim()) {
-      setErrorMessage('O número do lote é obrigatório.');
+    if (!codigoLote.trim()) {
+      setError('O código/número do lote é obrigatório.');
       return;
     }
 
-    const qtd = parseInt(quantidadeInicial, 10);
-    if (isNaN(qtd) || qtd <= 0) {
-      setErrorMessage('A quantidade de unidades recebidas deve ser um número inteiro maior que zero.');
+    if (!Number.isFinite(qtyNumber) || qtyNumber <= 0) {
+      setError(
+        isQuantityMode
+          ? 'A quantidade inicial deve ser maior que zero.'
+          : 'A quantidade de unidades deve ser um número inteiro maior ou igual a 1.'
+      );
       return;
     }
 
-    const custo = precoCusto.trim() ? parseFloat(precoCusto.replace(',', '.')) : null;
-    if (custo !== null && (isNaN(custo) || custo < 0)) {
-      setErrorMessage('O preço de custo deve ser um valor numérico válido.');
+    if (!isQuantityMode && (!Number.isInteger(qtyNumber) || qtyNumber > 500)) {
+      setError(
+        'Para produtos rastreados por unidade física (UNIT), informe um inteiro entre 1 e 500.'
+      );
       return;
     }
 
-    setIsSubmitting(true);
+    const isoCompra = dataCompraMasked ? dateBRToISO(dataCompraMasked) : '';
+    if (dataCompraMasked && !isoCompra) {
+      setError('Data de compra inválida. Use o formato DD/MM/AAAA.');
+      return;
+    }
 
+    const isoValidade = dataValidadeMasked ? dateBRToISO(dataValidadeMasked) : '';
+    if (dataValidadeMasked && !isoValidade) {
+      setError('Data de validade inválida. Use o formato DD/MM/AAAA.');
+      return;
+    }
+
+    setLoading(true);
     try {
-      const payload: any = {
-        numeroLote: numeroLote.trim(),
-        dataValidade: dataValidade ? new Date(dataValidade).toISOString() : null,
-        dataAquisicao: dataAquisicao ? new Date(dataAquisicao).toISOString() : new Date().toISOString(),
-        precoCusto: custo,
-        quantidadeInicial: qtd,
+      const payload = {
+        numeroLote: codigoLote.trim(),
+        codigoLote: codigoLote.trim(),
+        fornecedor: fornecedor.trim() || null,
+        dataAquisicao: isoCompra ? new Date(`${isoCompra}T12:00:00Z`).toISOString() : null,
+        dataCompra: isoCompra ? new Date(`${isoCompra}T12:00:00Z`).toISOString() : null,
+        dataValidade: isoValidade ? new Date(`${isoValidade}T12:00:00Z`).toISOString() : null,
+        quantidadeOriginal: isQuantityMode ? qtyNumber : Math.round(qtyNumber),
+        quantidadeInicial: isQuantityMode ? qtyNumber : Math.round(qtyNumber),
+        precoCusto: costNumber,
+        custoTotal: costNumber,
+        custoUnitario: unitCostPreview,
         observacoes: observacoes.trim() || null,
       };
 
-      const res = await fetch(`/api/products/${selectedProductId}/lots`, {
+      const res = await fetch(`/api/products/${productId}/lots`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || 'Erro ao registrar entrada de lote.');
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Erro ao registrar entrada de lote.');
       }
 
-      onOpenChange(false);
       onSuccess();
+      onOpenChange(false);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Falha ao registrar lote.');
+      setError(err.message || 'Erro inesperado ao registrar lote.');
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="sm:max-w-[540px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <PackagePlus className="h-5 w-5 text-primary" />
-            Entrada de Lote de Estoque
+            <Layers className="h-5 w-5 text-primary" />
+            Entrada de Lote em Estoque
           </DialogTitle>
           <DialogDescription>
-            Receba um lote físico do produto. O sistema gerará automaticamente as unidades individuais
-            rastreáveis com código serial único.
+            {isQuantityMode
+              ? 'Registre um novo lote com saldo de quantidade/volume para consumo fracionado.'
+              : 'Registre um novo lote. O sistema gerará automaticamente as unidades físicas individuais.'}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 py-2">
-          {errorMessage && (
-            <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>{errorMessage}</span>
+          {error && (
+            <div className="rounded-md bg-destructive/10 border border-destructive/30 p-3 text-sm text-destructive">
+              {error}
             </div>
           )}
 
-          <div className="space-y-1">
-            <Label htmlFor="lote-produto">
-              Produto <span className="text-destructive">*</span>
-            </Label>
-            <Select value={selectedProductId} onValueChange={setSelectedProductId}>
-              <SelectTrigger id="lote-produto">
-                <SelectValue placeholder="Selecione o produto" />
-              </SelectTrigger>
-              <SelectContent>
-                {products.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.nome} {p.marca ? `(${p.marca})` : ''} - {p.unidade}
-                    {p.isReusable ? ' [Reutilizável]' : ' [Uso Único]'}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <Label htmlFor="lote-numero">
-                Número do Lote <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="lote-numero"
-                value={numeroLote}
-                onChange={(e) => setNumeroLote(e.target.value)}
-                placeholder="Ex: LOT-2026-X1"
-                required
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="lote-quantidade">
-                Quantidade Recebida (Unidades) <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="lote-quantidade"
-                type="number"
-                min="1"
-                max="1000"
-                value={quantidadeInicial}
-                onChange={(e) => setQuantidadeInicial(e.target.value)}
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <Label htmlFor="lote-validade">Data de Validade</Label>
-              <Input
-                id="lote-validade"
-                type="date"
-                value={dataValidade}
-                onChange={(e) => setDataValidade(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="lote-aquisicao">Data de Aquisição</Label>
-              <Input
-                id="lote-aquisicao"
-                type="date"
-                value={dataAquisicao}
-                onChange={(e) => setDataAquisicao(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <Label htmlFor="lote-custo">Preço de Custo Unitário (R$)</Label>
-              <Input
-                id="lote-custo"
-                type="number"
-                step="0.01"
-                min="0"
-                value={precoCusto}
-                onChange={(e) => setPrecoCusto(e.target.value)}
-                placeholder="Ex: 450.00"
-              />
-            </div>
-
-            <div className="space-y-1 flex flex-col justify-end">
-              <div className="p-2.5 border rounded bg-muted/30 text-xs">
-                <span className="font-semibold block">Geração Automática:</span>
-                <span className="text-muted-foreground">
-                  Serão criados seriais no padrão <code>{numeroLote.trim() || 'LOTE'}-001</code> até{' '}
-                  <code>
-                    {numeroLote.trim() || 'LOTE'}-
-                    {String(parseInt(quantidadeInicial || '1', 10)).padStart(3, '0')}
-                  </code>
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <Label htmlFor="lote-obs">Observações do Fornecedor / Lote</Label>
-            <Textarea
-              id="lote-obs"
-              value={observacoes}
-              onChange={(e) => setObservacoes(e.target.value)}
-              placeholder="Número de nota fiscal, condições de recebimento, temperatura..."
-              rows={2}
+          <div className="space-y-2">
+            <Label htmlFor="lot-product">Produto *</Label>
+            <AppCombobox
+              id="lot-product"
+              options={productOptions}
+              value={productId}
+              onChange={setProductId}
+              disabled={Boolean(preselectedProductId)}
+              placeholder="Selecione um produto..."
+              searchable
             />
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="lot-codigo">Número / Código do Lote *</Label>
+              <Input
+                id="lot-codigo"
+                placeholder="Ex: LOTE-2026-A1"
+                value={codigoLote}
+                onChange={(e) => setCodigoLote(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="lot-fornecedor">Fornecedor</Label>
+              <Input
+                id="lot-fornecedor"
+                placeholder="Ex: Distribuidora Médica Sul"
+                value={fornecedor}
+                onChange={(e) => setFornecedor(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="lot-compra">Data de Compra / Aquisição</Label>
+              <DatePicker
+                id="lot-compra"
+                placeholder="DD/MM/AAAA"
+                value={dataCompraMasked}
+                onChange={setDataCompraMasked}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="lot-validade">Data de Validade</Label>
+              <DatePicker
+                id="lot-validade"
+                placeholder="DD/MM/AAAA"
+                value={dataValidadeMasked}
+                onChange={setDataValidadeMasked}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="lot-qty">
+                {isQuantityMode
+                  ? `Quantidade Inicial (${selectedProduct?.unidade || 'un'}) *`
+                  : `Qtd. de Unidades Físicas (${selectedProduct?.unidade || 'un'}) *`}
+              </Label>
+              <Input
+                id="lot-qty"
+                type="number"
+                min={isQuantityMode ? '0.01' : '1'}
+                max={isQuantityMode ? '100000' : '500'}
+                step={isQuantityMode ? '0.01' : '1'}
+                value={quantidadeOriginal}
+                onChange={(e) => setQuantidadeOriginal(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="lot-custo">Custo Total do Lote (R$)</Label>
+              <Input
+                id="lot-custo"
+                type="text"
+                inputMode="numeric"
+                placeholder="R$ 0,00"
+                value={custoTotalMasked}
+                onChange={(e) => setCustoTotalMasked(maskCurrencyBRL(e.target.value))}
+              />
+            </div>
+          </div>
+
+          {qtyNumber > 0 && (
+            <div className="rounded-lg border bg-primary/5 p-3 flex items-start gap-3">
+              <Info className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+              <div className="text-xs space-y-1 flex-1">
+                {isQuantityMode ? (
+                  <p className="font-medium text-foreground">
+                    Será adicionado saldo de{' '}
+                    <Badge variant="default" className="mx-0.5">
+                      {qtyNumber} {selectedProduct?.unidade || 'un'}
+                    </Badge>{' '}
+                    disponível para baixa parcial ou integral neste lote.
+                  </p>
+                ) : (
+                  <p className="font-medium text-foreground">
+                    Serão geradas automaticamente{' '}
+                    <Badge variant="default" className="mx-0.5">
+                      {Math.round(qtyNumber)} unidades
+                    </Badge>{' '}
+                    individuais com status{' '}
+                    <span className="text-emerald-600 font-semibold">Disponível</span>.
+                  </p>
+                )}
+                {unitCostPreview > 0 && (
+                  <p className="text-muted-foreground">
+                    Custo unitário calculado:{' '}
+                    <strong>
+                      {unitCostPreview.toLocaleString('pt-BR', {
+                        style: 'currency',
+                        currency: 'BRL',
+                      })}
+                    </strong>{' '}
+                    por {selectedProduct?.unidade || 'unidade'}.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="lot-obs">Observações do Lote</Label>
+            <textarea
+              id="lot-obs"
+              rows={2}
+              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              placeholder="Nota fiscal, condições de recebimento..."
+              value={observacoes}
+              onChange={(e) => setObservacoes(e.target.value)}
+            />
+          </div>
+
+          <DialogFooter className="pt-2">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={isSubmitting}
+              disabled={loading}
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Gerando unidades...' : 'Confirmar Entrada de Lote'}
+            <Button type="submit" disabled={loading}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Registrar Lote
             </Button>
           </DialogFooter>
         </form>

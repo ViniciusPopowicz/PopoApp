@@ -5,13 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { AppCombobox } from '@/components/ui/app-combobox';
 import {
   Upload,
   Camera,
@@ -157,19 +151,18 @@ export function AttendanceAttachmentsSection({
 
         {isEditable && (
           <div className="flex items-center gap-2">
-            <Select
+            <AppCombobox
+              options={[
+                { value: 'foto_antes', label: 'Foto Antes' },
+                { value: 'foto_depois', label: 'Foto Depois' },
+                { value: 'documento', label: 'Documento' },
+              ]}
               value={selectedCategory}
-              onValueChange={(v) => setSelectedCategory(v as any)}
-            >
-              <SelectTrigger className="w-[140px] text-xs h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="foto_antes">Foto Antes</SelectItem>
-                <SelectItem value="foto_depois">Foto Depois</SelectItem>
-                <SelectItem value="documento">Documento</SelectItem>
-              </SelectContent>
-            </Select>
+              onChange={(v) => setSelectedCategory(v as any)}
+              searchable={false}
+              className="w-[150px]"
+              triggerClassName="text-xs h-9"
+            />
 
             <input
               type="file"

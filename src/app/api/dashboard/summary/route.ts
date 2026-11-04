@@ -5,6 +5,8 @@ import { DashboardService } from '@/services/dashboard.service';
 import { dashboardQuerySchema } from '@/schemas/dashboard';
 import { DomainError } from '@/lib/errors';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     await requireAuth(request);
@@ -28,9 +30,13 @@ export async function GET(request: NextRequest) {
     const summary = await DashboardService.getDashboardSummary(parsed.data);
     return NextResponse.json({ success: true, data: summary });
   } catch (error: any) {
+    console.error('Error in /api/dashboard/summary:', error);
     if (error instanceof DomainError) {
       return NextResponse.json({ success: false, error: error.message }, { status: error.statusCode });
     }
-    return NextResponse.json({ success: false, error: 'Erro interno ao gerar métricas do dashboard' }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: 'Erro interno ao gerar métricas do dashboard', details: error?.message },
+      { status: 500 }
+    );
   }
 }

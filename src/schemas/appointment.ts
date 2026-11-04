@@ -64,7 +64,7 @@ export const appointmentListQuerySchema = z.object({
   clientId: z.string().uuid().optional(),
   status: z.union([appointmentStatusSchema, z.literal('todos')]).optional().default('todos'),
   page: z.coerce.number().int().min(1).optional().default(1),
-  limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+  limit: z.coerce.number().int().min(1).max(500).optional().default(50),
 });
 
 export type CreateAppointmentInput = z.input<typeof createAppointmentSchema>;

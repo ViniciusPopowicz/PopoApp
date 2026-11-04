@@ -35,6 +35,8 @@ export const createFinancialObligationSchema = z.object({
     invalid_type_error: 'Data de vencimento inválida',
   }),
   metodo: z.string().trim().max(50).optional().nullable(),
+  status: obligationStatusSchema.optional(),
+  dataPagamento: z.coerce.date().optional().nullable(),
   observacoes: z.string().trim().max(2000).optional().nullable(),
 });
 
@@ -99,6 +101,7 @@ export const reverseFinancialRecordSchema = z.object({
 });
 
 export const obligationListQuerySchema = z.object({
+  search: z.string().trim().optional(),
   tipo: z.union([obligationTypeSchema, z.literal('todos')]).optional().default('todos'),
   status: z.union([obligationStatusSchema, z.literal('todos')]).optional().default('todos'),
   clientId: z.string().uuid().optional(),
@@ -113,6 +116,7 @@ export const obligationListQuerySchema = z.object({
 });
 
 export const movementListQuerySchema = z.object({
+  search: z.string().trim().optional(),
   tipo: z.union([z.enum(FINANCIAL_MOVEMENT_TYPES), z.literal('todos')]).optional().default('todos'),
   status: z.union([z.enum(FINANCIAL_MOVEMENT_STATUSES), z.literal('todos')]).optional().default('todos'),
   origem: z.string().trim().optional(),

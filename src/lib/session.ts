@@ -27,11 +27,14 @@ export async function getSession(request?: NextRequest) {
   }
 }
 
+import { ensureDatabaseSchema } from '@/lib/db-bootstrap';
+
 /**
  * Guard that verifies the active session.
  * Throws UnauthorizedError (401) if not logged in.
  */
 export async function requireAuth(request?: NextRequest): Promise<SessionData> {
+  await ensureDatabaseSchema();
   const session = await getSession(request);
   if (!session || !session.isLoggedIn || !session.userId) {
     throw new UnauthorizedError('Sessão expirada ou não autenticada');

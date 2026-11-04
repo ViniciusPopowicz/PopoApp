@@ -29,33 +29,60 @@ import {
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/format';
 
 interface DashboardData {
-  financial: {
-    monthly: {
-      receivedRevenue: number;
-      averageTicket: number;
-      totalRevenue: number;
+  financial?: {
+    monthly?: {
+      receivedRevenue?: number;
+      averageTicket?: number;
+      totalRevenue?: number;
+      grossRevenue?: number;
+      netRevenue?: number;
+      outstandingRevenue?: number;
     };
   };
-  operations: {
-    appointments: {
-      todayTotal: number;
-      nextAppointments: Array<{
+  operations?: {
+    appointments?: {
+      todayTotal?: number;
+      upcomingList?: Array<{
         id: string;
         dataHora: string;
         status: string;
-        client: { id: string; nome: string };
-        plannedProcedures?: Array<{ procedure: { nome: string } }>;
+        clientId?: string;
+        clientName?: string;
+        procedimentosPlanejados?: string[];
+      }>;
+      nextAppointments?: Array<{
+        id: string;
+        dataHora: string;
+        status: string;
+        client?: { id: string; nome: string };
+        clientName?: string;
+        procedimentosPlanejados?: string[];
+        plannedProcedures?: Array<{ procedure?: { nome: string }; nome?: string }>;
       }>;
     };
-    attendances: {
-      completedCount: number;
-      pendingCount: number;
+    attendances?: {
+      completedCount?: number;
+      realizadosCount?: number;
+      pendingCount?: number;
+      pendentesCount?: number;
+      todayTotal?: number;
     };
   };
-  alerts: {
-    lowStock: {
-      totalAlerts: number;
-      items: Array<{
+  alerts?: {
+    lowStock?: Array<{
+      productId?: string;
+      id?: string;
+      productName?: string;
+      nome?: string;
+      availableUnits?: number;
+      estoqueAtual?: number;
+      estoqueMinimo?: number;
+      unidade?: string;
+      alertLevel?: string;
+      isCritical?: boolean;
+    }> | {
+      totalAlerts?: number;
+      items?: Array<{
         id: string;
         nome: string;
         estoqueAtual: number;
@@ -64,33 +91,63 @@ interface DashboardData {
         isCritical: boolean;
       }>;
     };
-    reminders: {
-      totalPending: number;
-      totalOverdue: number;
-      overdueItems: Array<{
+    reminders?: {
+      summary?: {
+        totalPending?: number;
+        overdueCount?: number;
+        todayCount?: number;
+        upcomingCount?: number;
+      };
+      items?: Array<{
         id: string;
         titulo: string;
         dataVencimento: string;
         prioridade: string;
-        client?: { nome: string } | null;
-        pixInstallment?: { valor: number } | null;
+        clientName?: string | null;
+        installmentValor?: number | null;
+        isOverdue?: boolean;
       }>;
-      upcomingItems: Array<{
+      totalPending?: number;
+      totalOverdue?: number;
+      overdueItems?: Array<{
         id: string;
         titulo: string;
         dataVencimento: string;
         prioridade: string;
         client?: { nome: string } | null;
+        clientName?: string | null;
         pixInstallment?: { valor: number } | null;
+        installmentValor?: number | null;
+      }>;
+      upcomingItems?: Array<{
+        id: string;
+        titulo: string;
+        dataVencimento: string;
+        prioridade: string;
+        client?: { nome: string } | null;
+        clientName?: string | null;
+        pixInstallment?: { valor: number } | null;
+        installmentValor?: number | null;
       }>;
     };
-    birthdays: {
-      count: number;
-      items: Array<{
+    birthdays?: Array<{
+      id: string;
+      nome: string;
+      dataNascimento?: string;
+      dataAniversario?: string;
+      diasFaltando?: number;
+      proximoAniversario?: string;
+      diasRestantes?: number;
+    }> | {
+      count?: number;
+      items?: Array<{
         id: string;
         nome: string;
-        diasRestantes: number;
-        proximoAniversario: string;
+        diasRestantes?: number;
+        diasFaltando?: number;
+        proximoAniversario?: string;
+        dataAniversario?: string;
+        dataNascimento?: string;
       }>;
     };
   };
@@ -107,7 +164,14 @@ export default function DashboardPage() {
       setError(null);
       const res = await fetch('/api/dashboard/summary');
       if (!res.ok) {
-        throw new Error('Falha ao carregar dados do dashboard');
+        let errorMsg = 'Falha ao carregar dados do dashboard';
+        try {
+          const errJson = await res.json();
+          if (errJson?.error) errorMsg = errJson.error;
+        } catch {
+          // ignore json parsing errors for non-json responses
+        }
+        throw new Error(errorMsg);
       }
       const json = await res.json();
       if (json.success && json.data) {
@@ -127,17 +191,106 @@ export default function DashboardPage() {
     fetchSummary();
   }, []);
 
-  const monthlyRevenue = data?.financial?.monthly?.receivedRevenue ?? 0;
-  const averageTicket = data?.financial?.monthly?.averageTicket ?? 0;
-  const completedAttendances = data?.operations?.attendances?.completedCount ?? 0;
+  const monthlyRevenue = data?.financial?.monthly?.receivedRevenue ?? data?.financial?.monthly?.totalRevenue ?? 0;
+  const completedAttendances =
+    data?.operations?.attendances?.completedCount ??
+    data?.operations?.attendances?.realizadosCount ??
+    0;
+  const averageTicket =
+    data?.financial?.monthly?.averageTicket ??
+    (completedAttendances > 0 ? Number((monthlyRevenue / completedAttendances).toFixed(2)) : 0);
   const todayAppointments = data?.operations?.appointments?.todayTotal ?? 0;
 
-  const lowStockItems = data?.alerts?.lowStock?.items ?? [];
-  const overdueReminders = data?.alerts?.reminders?.overdueItems ?? [];
-  const upcomingReminders = data?.alerts?.reminders?.upcomingItems ?? [];
-  const allReminders = [...overdueReminders, ...upcomingReminders];
-  const birthdays = data?.alerts?.birthdays?.items ?? [];
-  const nextAppointments = data?.operations?.appointments?.nextAppointments ?? [];
+  // Normalize low stock items whether an array or an object with .items
+  const rawLowStock = data?.alerts?.lowStock;
+  const lowStockItems: Array<{
+    id: string;
+    nome: string;
+    estoqueAtual: number;
+    estoqueMinimo: number;
+    unidade: string;
+    isCritical: boolean;
+  }> = Array.isArray(rawLowStock)
+    ? rawLowStock.map((item: any) => ({
+        id: item.productId || item.id,
+        nome: item.productName || item.nome,
+        estoqueAtual: item.availableUnits ?? item.estoqueAtual ?? 0,
+        estoqueMinimo: item.estoqueMinimo ?? 5,
+        unidade: item.unidade || 'un',
+        isCritical: item.alertLevel === 'CRITICO' || item.isCritical || (item.availableUnits ?? 0) === 0,
+      }))
+    : (rawLowStock?.items ?? []);
+
+  // Normalize reminders
+  const rawReminders = data?.alerts?.reminders;
+  const allReminders: Array<{
+    id: string;
+    titulo: string;
+    dataVencimento: string;
+    prioridade: string;
+    clientName: string;
+    pixValor?: number | null;
+    isOverdue: boolean;
+  }> = rawReminders?.items
+    ? rawReminders.items.map((r: any) => ({
+        id: r.id,
+        titulo: r.titulo,
+        dataVencimento: r.dataVencimento,
+        prioridade: r.prioridade,
+        clientName: r.clientName || r.client?.nome || '—',
+        pixValor: r.installmentValor ?? r.pixInstallment?.valor ?? null,
+        isOverdue: r.isOverdue ?? (r.dataVencimento ? new Date(r.dataVencimento) < new Date() : false),
+      }))
+    : [
+        ...(rawReminders?.overdueItems ?? []),
+        ...(rawReminders?.upcomingItems ?? []),
+      ].map((r: any) => ({
+        id: r.id,
+        titulo: r.titulo,
+        dataVencimento: r.dataVencimento,
+        prioridade: r.prioridade,
+        clientName: r.client?.nome || r.clientName || '—',
+        pixValor: r.pixInstallment?.valor ?? r.installmentValor ?? null,
+        isOverdue: r.dataVencimento ? new Date(r.dataVencimento) < new Date() : false,
+      }));
+
+  // Normalize birthdays
+  const rawBirthdays = data?.alerts?.birthdays;
+  const birthdays: Array<{
+    id: string;
+    nome: string;
+    diasRestantes: number;
+    dataExibicao: string;
+  }> = (Array.isArray(rawBirthdays) ? rawBirthdays : (rawBirthdays?.items ?? [])).map((a: any) => ({
+    id: a.id,
+    nome: a.nome,
+    diasRestantes: a.diasFaltando ?? a.diasRestantes ?? 0,
+    dataExibicao: a.dataAniversario || (a.proximoAniversario ? formatDate(a.proximoAniversario) : (a.dataNascimento ? formatDate(a.dataNascimento) : '—')),
+  }));
+
+  // Normalize upcoming appointments
+  const rawAppts = data?.operations?.appointments;
+  const nextAppointments: Array<{
+    id: string;
+    dataHora: string;
+    clientName: string;
+    procNames: string;
+    status: string;
+  }> = (rawAppts?.upcomingList || rawAppts?.nextAppointments || []).map((a: any) => {
+    let procNames = 'Não especificado';
+    if (Array.isArray(a.procedimentosPlanejados) && a.procedimentosPlanejados.length > 0) {
+      procNames = a.procedimentosPlanejados.join(', ');
+    } else if (Array.isArray(a.plannedProcedures) && a.plannedProcedures.length > 0) {
+      procNames = a.plannedProcedures.map((p: any) => p.procedure?.nome || p.nome).filter(Boolean).join(', ') || 'Não especificado';
+    }
+    return {
+      id: a.id,
+      dataHora: a.dataHora,
+      clientName: a.clientName || a.client?.nome || '—',
+      procNames,
+      status: a.status || 'Agendado',
+    };
+  });
 
   return (
     <div className="space-y-6">
@@ -254,25 +407,20 @@ export default function DashboardPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {nextAppointments.map((agendamento) => {
-                      const procNames = agendamento.plannedProcedures
-                        ?.map((p) => p.procedure.nome)
-                        .join(', ') || 'Não especificado';
-                      return (
-                        <TableRow key={agendamento.id}>
-                          <TableCell className="font-medium whitespace-nowrap">
-                            {formatDateTime(new Date(agendamento.dataHora))}
-                          </TableCell>
-                          <TableCell className="font-medium">{agendamento.client?.nome || '—'}</TableCell>
-                          <TableCell className="text-muted-foreground text-sm max-w-[200px] truncate">
-                            {procNames}
-                          </TableCell>
-                          <TableCell>
-                            <StatusBadge status={agendamento.status} />
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                    {nextAppointments.map((agendamento) => (
+                      <TableRow key={agendamento.id}>
+                        <TableCell className="font-medium whitespace-nowrap">
+                          {formatDateTime(agendamento.dataHora)}
+                        </TableCell>
+                        <TableCell className="font-medium">{agendamento.clientName}</TableCell>
+                        <TableCell className="text-muted-foreground text-sm max-w-[200px] truncate">
+                          {agendamento.procNames}
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge status={agendamento.status} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
                   </TableBody>
                 </Table>
               </div>
@@ -346,28 +494,25 @@ export default function DashboardPage() {
                 <p className="text-muted-foreground text-sm py-4 text-center">Carregando lembretes...</p>
               ) : allReminders.length > 0 ? (
                 <ul className="space-y-3">
-                  {allReminders.slice(0, 5).map((lembrete) => {
-                    const isOverdue = new Date(lembrete.dataVencimento) < new Date();
-                    return (
-                      <li key={lembrete.id} className="flex flex-col gap-1 border-b last:border-0 pb-2 last:pb-0">
-                        <div className="flex justify-between items-start">
-                          <p className="font-medium text-sm leading-tight">{lembrete.titulo}</p>
-                          <Badge variant={isOverdue ? 'destructive' : 'secondary'} className="text-[10px]">
-                            {isOverdue ? 'Atrasado' : 'A Vencer'}
-                          </Badge>
+                  {allReminders.slice(0, 5).map((lembrete) => (
+                    <li key={lembrete.id} className="flex flex-col gap-1 border-b last:border-0 pb-2 last:pb-0">
+                      <div className="flex justify-between items-start">
+                        <p className="font-medium text-sm leading-tight">{lembrete.titulo}</p>
+                        <Badge variant={lembrete.isOverdue ? 'destructive' : 'secondary'} className="text-[10px]">
+                          {lembrete.isOverdue ? 'Atrasado' : 'A Vencer'}
+                        </Badge>
+                      </div>
+                      <div className="flex justify-between items-center text-xs text-muted-foreground">
+                        <span>{lembrete.clientName}</span>
+                        <span>Venc.: {formatDate(lembrete.dataVencimento)}</span>
+                      </div>
+                      {lembrete.pixValor != null && (
+                        <div className="text-xs font-semibold text-primary">
+                          {formatCurrency(lembrete.pixValor)}
                         </div>
-                        <div className="flex justify-between items-center text-xs text-muted-foreground">
-                          <span>{lembrete.client?.nome || '—'}</span>
-                          <span>Venc.: {formatDate(new Date(lembrete.dataVencimento))}</span>
-                        </div>
-                        {lembrete.pixInstallment && (
-                          <div className="text-xs font-semibold text-primary">
-                            {formatCurrency(lembrete.pixInstallment.valor)}
-                          </div>
-                        )}
-                      </li>
-                    );
-                  })}
+                      )}
+                    </li>
+                  ))}
                 </ul>
               ) : (
                 <p className="text-muted-foreground text-sm text-center py-4">Nenhum lembrete pendente.</p>
@@ -394,7 +539,7 @@ export default function DashboardPage() {
                       <div>
                         <p className="font-medium">{a.nome}</p>
                         <p className="text-xs text-muted-foreground">
-                          {formatDate(new Date(a.proximoAniversario))}
+                          {a.dataExibicao}
                         </p>
                       </div>
                       <Badge variant={a.diasRestantes === 0 ? 'default' : 'secondary'}>

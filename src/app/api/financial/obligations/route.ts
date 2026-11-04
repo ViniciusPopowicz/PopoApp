@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const query = obligationListQuerySchema.parse({
+      search: searchParams.get('search') ?? searchParams.get('q') ?? undefined,
       tipo: searchParams.get('tipo') ?? undefined,
       status: searchParams.get('status') ?? undefined,
       clientId: searchParams.get('clientId') ?? undefined,

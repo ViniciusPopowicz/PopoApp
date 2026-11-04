@@ -8,6 +8,8 @@ export interface FinancialMetricDto {
   netRevenue: number;           // Faturamento líquido (bruto - descontos)
   receivedRevenue: number;      // Entradas em caixa (pagamentos com status 'Pago' no período)
   outstandingRevenue: number;   // Saldo a receber dos atendimentos realizados no período
+  averageTicket?: number;
+  totalRevenue?: number;
 }
 
 export interface PaymentMethodBreakdownDto {
@@ -63,6 +65,13 @@ export interface AppointmentsMetricsDto {
     duracaoMinutos: number;
     procedimentosPlanejados: string[];
   }>;
+  nextAppointments?: Array<{
+    id: string;
+    dataHora: string;
+    status: string;
+    client: { id: string; nome: string };
+    plannedProcedures?: Array<{ procedure: { nome: string } }>;
+  }>;
 }
 
 export interface AttendancesMetricsDto {
@@ -71,6 +80,8 @@ export interface AttendancesMetricsDto {
   pendentesCount: number;
   canceladosCount: number;
   completionRate: number;       // Taxa de realização hoje (0 a 100)
+  completedCount?: number;
+  pendingCount?: number;
 }
 
 export interface LowStockAlertDto {
@@ -82,6 +93,7 @@ export interface LowStockAlertDto {
   isReusable: boolean;
   availableUnits: number;       // Unidades físicas disponíveis
   alertLevel: 'CRITICO' | 'BAIXO'; // 'CRITICO' se 0, 'BAIXO' se 1..5
+  estoqueMinimo?: number;
 }
 
 export interface DashboardReminderItemDto {
@@ -107,6 +119,24 @@ export interface RemindersWidgetDto {
     upcomingCount: number;
   };
   items: DashboardReminderItemDto[];
+  totalPending?: number;
+  totalOverdue?: number;
+  overdueItems?: Array<{
+    id: string;
+    titulo: string;
+    dataVencimento: string;
+    prioridade: string;
+    client?: { nome: string } | null;
+    pixInstallment?: { valor: number } | null;
+  }>;
+  upcomingItems?: Array<{
+    id: string;
+    titulo: string;
+    dataVencimento: string;
+    prioridade: string;
+    client?: { nome: string } | null;
+    pixInstallment?: { valor: number } | null;
+  }>;
 }
 
 export interface BirthdayItemDto {
@@ -116,6 +146,8 @@ export interface BirthdayItemDto {
   dataAniversario: string;      // DD/MM
   diasFaltando: number;
   telefone: string | null;
+  proximoAniversario?: string;
+  diasRestantes?: number;
 }
 
 export interface DashboardSummaryResponseDto {
