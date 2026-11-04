@@ -526,39 +526,37 @@ END;
 
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = N'Reminder_appointmentId_idx' AND object_id = OBJECT_ID(N'[dbo].[Reminder]'))
 BEGIN
-    CREATE NONCLUSTERED INDEX [Reminder_appointmentId_idx] ON [dbo].[Reminder]([appointmentId]);
+    EXEC('CREATE NONCLUSTERED INDEX [Reminder_appointmentId_idx] ON [dbo].[Reminder]([appointmentId]);');
 END;
 
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = N'Reminder_attendanceId_idx' AND object_id = OBJECT_ID(N'[dbo].[Reminder]'))
 BEGIN
-    CREATE NONCLUSTERED INDEX [Reminder_attendanceId_idx] ON [dbo].[Reminder]([attendanceId]);
+    EXEC('CREATE NONCLUSTERED INDEX [Reminder_attendanceId_idx] ON [dbo].[Reminder]([attendanceId]);');
 END;
 
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = N'Reminder_recurrenceId_idx' AND object_id = OBJECT_ID(N'[dbo].[Reminder]'))
 BEGIN
-    CREATE NONCLUSTERED INDEX [Reminder_recurrenceId_idx] ON [dbo].[Reminder]([recurrenceId]);
+    EXEC('CREATE NONCLUSTERED INDEX [Reminder_recurrenceId_idx] ON [dbo].[Reminder]([recurrenceId]);');
 END;
 
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = N'Reminder_recurrenceId_occurrenceIndex_key' AND object_id = OBJECT_ID(N'[dbo].[Reminder]'))
 BEGIN
-    CREATE UNIQUE NONCLUSTERED INDEX [Reminder_recurrenceId_occurrenceIndex_key]
-    ON [dbo].[Reminder]([recurrenceId], [occurrenceIndex])
-    WHERE [recurrenceId] IS NOT NULL AND [occurrenceIndex] IS NOT NULL;
+    EXEC('CREATE UNIQUE NONCLUSTERED INDEX [Reminder_recurrenceId_occurrenceIndex_key] ON [dbo].[Reminder]([recurrenceId], [occurrenceIndex]) WHERE [recurrenceId] IS NOT NULL AND [occurrenceIndex] IS NOT NULL;');
 END;
 
 IF NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE object_id = OBJECT_ID(N'[dbo].[Reminder_appointmentId_fkey]'))
 BEGIN
-    ALTER TABLE [dbo].[Reminder] ADD CONSTRAINT [Reminder_appointmentId_fkey] FOREIGN KEY ([appointmentId]) REFERENCES [dbo].[Appointment]([id]) ON DELETE NO ACTION ON UPDATE NO ACTION;
+    EXEC('ALTER TABLE [dbo].[Reminder] ADD CONSTRAINT [Reminder_appointmentId_fkey] FOREIGN KEY ([appointmentId]) REFERENCES [dbo].[Appointment]([id]) ON DELETE NO ACTION ON UPDATE NO ACTION;');
 END;
 
 IF NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE object_id = OBJECT_ID(N'[dbo].[Reminder_attendanceId_fkey]'))
 BEGIN
-    ALTER TABLE [dbo].[Reminder] ADD CONSTRAINT [Reminder_attendanceId_fkey] FOREIGN KEY ([attendanceId]) REFERENCES [dbo].[Attendance]([id]) ON DELETE NO ACTION ON UPDATE NO ACTION;
+    EXEC('ALTER TABLE [dbo].[Reminder] ADD CONSTRAINT [Reminder_attendanceId_fkey] FOREIGN KEY ([attendanceId]) REFERENCES [dbo].[Attendance]([id]) ON DELETE NO ACTION ON UPDATE NO ACTION;');
 END;
 
 IF NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE object_id = OBJECT_ID(N'[dbo].[Reminder_recurrenceId_fkey]'))
 BEGIN
-    ALTER TABLE [dbo].[Reminder] ADD CONSTRAINT [Reminder_recurrenceId_fkey] FOREIGN KEY ([recurrenceId]) REFERENCES [dbo].[ReminderRecurrence]([id]) ON DELETE NO ACTION ON UPDATE NO ACTION;
+    EXEC('ALTER TABLE [dbo].[Reminder] ADD CONSTRAINT [Reminder_recurrenceId_fkey] FOREIGN KEY ([recurrenceId]) REFERENCES [dbo].[ReminderRecurrence]([id]) ON DELETE NO ACTION ON UPDATE NO ACTION;');
 END;
 
 COMMIT TRAN;
