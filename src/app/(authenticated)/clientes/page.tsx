@@ -204,7 +204,7 @@ export default function ClientesPage() {
                         <div className="text-xs text-muted-foreground">{client.email}</div>
                       )}
                     </TableCell>
-                    <TableCell className="font-mono text-xs">
+                    <TableCell className="text-xs">
                       {formatCpf(client.cpf)}
                     </TableCell>
                     <TableCell>
@@ -230,7 +230,7 @@ export default function ClientesPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-center">
-                      <Badge variant="outline" className="font-mono">
+                      <Badge variant="outline">
                         {client._count?.attendances ?? 0}
                       </Badge>
                     </TableCell>
@@ -293,7 +293,7 @@ export default function ClientesPage() {
                 <div className="flex items-start justify-between">
                   <div>
                     <h3 className="font-semibold text-base">{client.nome}</h3>
-                    <p className="text-xs font-mono text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       CPF: {formatCpf(client.cpf)}
                     </p>
                   </div>

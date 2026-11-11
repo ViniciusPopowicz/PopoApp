@@ -16,6 +16,7 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 import { formatDate } from '@/lib/format';
+import { useAppDialogs } from '@/components/shared/app-dialogs';
 
 interface AttachmentItem {
   id: string;
@@ -103,8 +104,16 @@ export function AttendanceAttachmentsSection({
     }
   };
 
+  const { confirm, alert, DialogsNode } = useAppDialogs();
+
   const handleDelete = async (id: string) => {
-    if (!confirm('Deseja excluir este anexo permanentemente?')) return;
+    const confirmed = await confirm({
+      title: 'Excluir Anexo',
+      description: 'Deseja excluir este anexo permanentemente?',
+      confirmLabel: 'Excluir',
+      variant: 'destructive',
+    });
+    if (!confirmed) return;
     try {
       const res = await fetch(`/api/attachments/${id}`, {
         method: 'DELETE',
@@ -115,7 +124,11 @@ export function AttendanceAttachmentsSection({
       }
       await loadAttachments();
     } catch (err: any) {
-      alert(err.message || 'Erro ao excluir anexo.');
+      await alert({
+        title: 'Erro ao Excluir Anexo',
+        description: err.message || 'Erro ao excluir anexo.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -276,6 +289,7 @@ export function AttendanceAttachmentsSection({
           </div>
         )}
       </CardContent>
+      {DialogsNode}
     </Card>
   );
 }

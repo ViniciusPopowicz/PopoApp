@@ -64,7 +64,14 @@ import {
   dateBRToISO,
   isoToDateBR,
 } from '@/lib/masks';
-import { formatCurrency, formatDateTime, formatTime } from '@/lib/format';
+import {
+  formatCurrency,
+  formatDateTime,
+  formatTime,
+  calculateEstimatedDurationMinutes,
+  formatDurationMinutes,
+} from '@/lib/format';
+import { useAppDialogs } from '@/components/shared/app-dialogs';
 
 // Types
 interface ClientOption {
@@ -285,6 +292,54 @@ export default function AgendaPage() {
     loadAppointments();
   }, [loadAppointments]);
 
+  const { confirm, alert, DialogsNode } = useAppDialogs();
+
+  // Deep-link support (?appointmentId=...) from Client Details (MELHORIA-015)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const targetApptId = params.get('appointmentId');
+    if (!targetApptId) return;
+
+    let cancelled = false;
+    async function loadDeepLinkedAppointment(id: string) {
+      try {
+        const res = await fetch(`/api/appointments/${id}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        const appt = json.data || json.appointment;
+        if (!cancelled && appt && appt.id) {
+          setSelectedAppointment(appt);
+          if (appt.dataHora) {
+            const dt = parseISO(appt.dataHora);
+            if (!isNaN(dt.getTime())) {
+              setCurrentDate(dt);
+            }
+          }
+          setShowDetailDialog(true);
+        }
+      } catch (err) {
+        console.error('Error loading deep-linked appointment:', err);
+      }
+    }
+    loadDeepLinkedAppointment(targetApptId);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const newEstimatedDurationMinutes = useMemo(() => {
+    const selectedProcObjects = newSelectedProcedures
+      .map((id) => procedures.find((p) => p.id === id))
+      .filter(Boolean);
+    return calculateEstimatedDurationMinutes(selectedProcObjects);
+  }, [newSelectedProcedures, procedures]);
+
+  const detailEstimatedDurationMinutes = useMemo(() => {
+    if (!selectedAppointment) return 0;
+    return calculateEstimatedDurationMinutes(selectedAppointment.plannedProcedures);
+  }, [selectedAppointment]);
+
   const clientComboboxOptions = useMemo(
     () =>
       clients.map((c) => ({
@@ -410,14 +465,24 @@ export default function AgendaPage() {
       setShowDetailDialog(false);
       await loadAppointments();
     } catch (err: any) {
-      alert(err.message || 'Erro ao confirmar agendamento.');
+      await alert({
+        title: 'Erro ao Confirmar Agendamento',
+        description: err.message || 'Erro ao confirmar agendamento.',
+        variant: 'destructive',
+      });
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleNoShowAppointment = async (apptId: string) => {
-    if (!confirm('Deseja realmente marcar este agendamento como "Não Compareceu"?')) return;
+    const confirmed = await confirm({
+      title: 'Registrar Não Comparecimento',
+      description: 'Deseja realmente marcar este agendamento como "Não Compareceu"?',
+      confirmLabel: 'Confirmar Falta',
+      variant: 'destructive',
+    });
+    if (!confirmed) return;
     try {
       setActionLoading(true);
       const res = await fetch(`/api/appointments/${apptId}/no-show`, {
@@ -432,7 +497,11 @@ export default function AgendaPage() {
       setShowDetailDialog(false);
       await loadAppointments();
     } catch (err: any) {
-      alert(err.message || 'Erro ao registrar falta.');
+      await alert({
+        title: 'Erro ao Registrar Falta',
+        description: err.message || 'Erro ao registrar falta.',
+        variant: 'destructive',
+      });
     } finally {
       setActionLoading(false);
     }
@@ -940,17 +1009,30 @@ export default function AgendaPage() {
               </div>
             </div>
 
-            {/* Valor Estimado */}
-            <div className="space-y-1.5">
-              <Label htmlFor="valor-estimado">Valor Estimado (R$)</Label>
-              <Input
-                id="valor-estimado"
-                type="text"
-                inputMode="numeric"
-                placeholder="R$ 0,00"
-                value={newValorEstimadoMasked}
-                onChange={(e) => setNewValorEstimadoMasked(maskCurrencyBRL(e.target.value))}
-              />
+            {/* Duração Estimada Total & Valor Estimado */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="duracao-estimada-total">Duração Estimada Total</Label>
+                <Input
+                  id="duracao-estimada-total"
+                  type="text"
+                  value={formatDurationMinutes(newEstimatedDurationMinutes)}
+                  disabled
+                  readOnly
+                  className="bg-muted/50 text-foreground font-medium disabled:opacity-100 cursor-default"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="valor-estimado">Valor Estimado (R$)</Label>
+                <Input
+                  id="valor-estimado"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="R$ 0,00"
+                  value={newValorEstimadoMasked}
+                  onChange={(e) => setNewValorEstimadoMasked(maskCurrencyBRL(e.target.value))}
+                />
+              </div>
             </div>
 
             {/* Observações */}
@@ -980,8 +1062,8 @@ export default function AgendaPage() {
       {/* Modal: Appointment Detail & Status Actions */}
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
         <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <div className="flex justify-between items-center">
+          <DialogHeader className="pr-8">
+            <div className="flex flex-wrap justify-between items-center gap-3">
               <DialogTitle>Detalhes do Agendamento</DialogTitle>
               {selectedAppointment && <StatusBadge status={selectedAppointment.status} />}
             </div>
@@ -1014,6 +1096,7 @@ export default function AgendaPage() {
                         className="text-xs bg-primary/10 text-primary font-medium px-2 py-1 rounded"
                       >
                         {p.procedure.nome}
+                        {p.procedure.duracaoMinutos ? ` (${p.procedure.duracaoMinutos} min)` : ''}
                       </span>
                     ))
                   ) : (
@@ -1022,14 +1105,24 @@ export default function AgendaPage() {
                 </div>
               </div>
 
-              {selectedAppointment.valorEstimado != null && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <div>
-                  <Label className="text-xs text-muted-foreground">Valor Estimado:</Label>
-                  <p className="font-semibold text-base">
-                    {formatCurrency(Number(selectedAppointment.valorEstimado))}
+                  <Label className="text-xs text-muted-foreground">Duração Estimada Total:</Label>
+                  <p className="font-semibold text-base flex items-center gap-1.5 mt-0.5">
+                    <Clock className="h-4 w-4 text-primary" />
+                    <span>{formatDurationMinutes(detailEstimatedDurationMinutes)}</span>
                   </p>
                 </div>
-              )}
+
+                {selectedAppointment.valorEstimado != null && (
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Valor Estimado:</Label>
+                    <p className="font-semibold text-base mt-0.5">
+                      {formatCurrency(Number(selectedAppointment.valorEstimado))}
+                    </p>
+                  </div>
+                )}
+              </div>
 
               {selectedAppointment.observacoes && (
                 <div>
@@ -1223,6 +1316,7 @@ export default function AgendaPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {DialogsNode}
     </div>
   );
 }

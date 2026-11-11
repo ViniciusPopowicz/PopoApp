@@ -26,6 +26,7 @@ import { ProcedureFormDialog } from '@/components/procedimentos/procedure-form-d
 import { ProcedureProductsDialog } from '@/components/procedimentos/procedure-products-dialog';
 import { ProcedureResponseDto } from '@/types/procedure';
 import { formatCurrency } from '@/lib/format';
+import { useAppDialogs } from '@/components/shared/app-dialogs';
 import {
   Clock,
   Edit2,
@@ -173,10 +174,15 @@ export default function ProcedimentosPage() {
     );
   }
 
+  const { confirm, alert, DialogsNode } = useAppDialogs();
+
   async function handleDelete(proc: ProcedureResponseDto) {
-    const confirmed = window.confirm(
-      `Deseja remover o procedimento "${proc.nome}"?\n\nNota: Caso já possua histórico em agendamentos ou atendimentos, ele será apenas inativado para preservar os registros clínicos.`
-    );
+    const confirmed = await confirm({
+      title: 'Remover Procedimento',
+      description: `Deseja remover o procedimento "${proc.nome}"?\n\nNota: Caso já possua histórico em agendamentos ou atendimentos, ele será apenas inativado para preservar os registros clínicos.`,
+      confirmLabel: 'Confirmar Remoção',
+      variant: 'destructive',
+    });
     if (!confirmed) return;
 
     try {
@@ -189,7 +195,11 @@ export default function ProcedimentosPage() {
       }
       await fetchProcedures();
     } catch (err: any) {
-      alert(err.message || 'Erro ao excluir procedimento');
+      await alert({
+        title: 'Erro ao Excluir Procedimento',
+        description: err.message || 'Erro ao excluir procedimento',
+        variant: 'destructive',
+      });
     }
   }
 
@@ -454,6 +464,7 @@ export default function ProcedimentosPage() {
         procedure={productsProcedure}
         onSuccess={fetchProcedures}
       />
+      {DialogsNode}
     </div>
   );
 }

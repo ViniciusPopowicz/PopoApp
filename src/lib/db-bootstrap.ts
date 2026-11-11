@@ -13,9 +13,9 @@ const globalForBootstrap = globalThis as unknown as {
  *
  * Safe no-op in in-memory Vitest environments where $executeRawUnsafe is not a real SQL Server engine.
  */
-export async function ensureDatabaseSchema(): Promise<void> {
-  if (globalForBootstrap.dbSchemaEnsured) return;
-  if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+export async function ensureDatabaseSchema(force = false): Promise<void> {
+  if (globalForBootstrap.dbSchemaEnsured && !force) return;
+  if (!force && (process.env.NODE_ENV === 'test' || process.env.VITEST)) {
     globalForBootstrap.dbSchemaEnsured = true;
     return;
   }
@@ -52,6 +52,17 @@ export async function ensureDatabaseSchema(): Promise<void> {
         row.hasReminderRecurrence != null &&
         row.hasInventoryMovement != null
       ) {
+        const repairStatements = [
+          `IF OBJECT_ID(N'[dbo].[MedicalRecord]', N'U') IS NOT NULL UPDATE [dbo].[MedicalRecord] SET [queixaPrincipal] = [avaliacaoClinica] WHERE [queixaPrincipal] IS NULL AND [avaliacaoClinica] IS NOT NULL;`,
+          `IF OBJECT_ID(N'[dbo].[ProductUsage]', N'U') IS NOT NULL UPDATE pu SET pu.[productId] = ISNULL(pu.[productId], pl.[productId]), pu.[lotId] = ISNULL(pu.[lotId], su.[lotId]), pu.[unidade] = ISNULL(pu.[unidade], p.[unidade]) FROM [dbo].[ProductUsage] pu INNER JOIN [dbo].[StockUnit] su ON pu.[stockUnitId] = su.[id] INNER JOIN [dbo].[ProductLot] pl ON su.[lotId] = pl.[id] INNER JOIN [dbo].[Product] p ON pl.[productId] = p.[id] WHERE pu.[productId] IS NULL OR pu.[lotId] IS NULL OR pu.[unidade] IS NULL;`,
+        ];
+        for (const sql of repairStatements) {
+          try {
+            await anyPrisma.$executeRawUnsafe(sql);
+          } catch (stmtErr) {
+            console.warn('[db-bootstrap] Non-fatal repair warning:', stmtErr);
+          }
+        }
         globalForBootstrap.dbSchemaEnsured = true;
         return;
       }
@@ -68,8 +79,8 @@ export async function ensureDatabaseSchema(): Promise<void> {
         `IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = N'Product_trackingMode_idx' AND object_id = OBJECT_ID(N'[dbo].[Product]')) CREATE NONCLUSTERED INDEX [Product_trackingMode_idx] ON [dbo].[Product]([trackingMode]);`,
         `IF COL_LENGTH('[dbo].[ProductLot]', 'quantidadeInicial') IS NULL ALTER TABLE [dbo].[ProductLot] ADD [quantidadeInicial] DECIMAL(10,3) NULL;`,
         `IF COL_LENGTH('[dbo].[ProductLot]', 'quantidadeDisponivel') IS NULL ALTER TABLE [dbo].[ProductLot] ADD [quantidadeDisponivel] DECIMAL(10,3) NULL;`,
-        `UPDATE [dbo].[ProductLot] SET [quantidadeInicial] = [quantidadeOriginal] WHERE [quantidadeInicial] IS NULL;`,
-        `UPDATE [dbo].[ProductLot] SET [quantidadeDisponivel] = [quantidadeOriginal] WHERE [quantidadeDisponivel] IS NULL;`,
+        `IF COL_LENGTH('[dbo].[ProductLot]', 'quantidadeOriginal') IS NOT NULL EXEC(N'UPDATE [dbo].[ProductLot] SET [quantidadeInicial] = [quantidadeOriginal] WHERE [quantidadeInicial] IS NULL');`,
+        `IF COL_LENGTH('[dbo].[ProductLot]', 'quantidadeOriginal') IS NOT NULL EXEC(N'UPDATE [dbo].[ProductLot] SET [quantidadeDisponivel] = [quantidadeOriginal] WHERE [quantidadeDisponivel] IS NULL');`,
         `IF COL_LENGTH('[dbo].[StockUnit]', 'quantidadeInicial') IS NULL ALTER TABLE [dbo].[StockUnit] ADD [quantidadeInicial] DECIMAL(10,3) NULL;`,
         `IF COL_LENGTH('[dbo].[StockUnit]', 'quantidadeDisponivel') IS NULL ALTER TABLE [dbo].[StockUnit] ADD [quantidadeDisponivel] DECIMAL(10,3) NULL;`,
         `IF COL_LENGTH('[dbo].[StockUnit]', 'motivoStatus') IS NULL ALTER TABLE [dbo].[StockUnit] ADD [motivoStatus] NVARCHAR(1000) NULL;`,
@@ -285,6 +296,8 @@ export async function ensureDatabaseSchema(): Promise<void> {
         `IF NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE object_id = OBJECT_ID(N'[dbo].[Reminder_appointmentId_fkey]')) ALTER TABLE [dbo].[Reminder] ADD CONSTRAINT [Reminder_appointmentId_fkey] FOREIGN KEY ([appointmentId]) REFERENCES [dbo].[Appointment]([id]) ON DELETE NO ACTION ON UPDATE NO ACTION;`,
         `IF NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE object_id = OBJECT_ID(N'[dbo].[Reminder_attendanceId_fkey]')) ALTER TABLE [dbo].[Reminder] ADD CONSTRAINT [Reminder_attendanceId_fkey] FOREIGN KEY ([attendanceId]) REFERENCES [dbo].[Attendance]([id]) ON DELETE NO ACTION ON UPDATE NO ACTION;`,
         `IF NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE object_id = OBJECT_ID(N'[dbo].[Reminder_recurrenceId_fkey]')) ALTER TABLE [dbo].[Reminder] ADD CONSTRAINT [Reminder_recurrenceId_fkey] FOREIGN KEY ([recurrenceId]) REFERENCES [dbo].[ReminderRecurrence]([id]) ON DELETE NO ACTION ON UPDATE NO ACTION;`,
+        `IF OBJECT_ID(N'[dbo].[MedicalRecord]', N'U') IS NOT NULL UPDATE [dbo].[MedicalRecord] SET [queixaPrincipal] = [avaliacaoClinica] WHERE [queixaPrincipal] IS NULL AND [avaliacaoClinica] IS NOT NULL;`,
+        `IF OBJECT_ID(N'[dbo].[ProductUsage]', N'U') IS NOT NULL UPDATE pu SET pu.[productId] = ISNULL(pu.[productId], pl.[productId]), pu.[lotId] = ISNULL(pu.[lotId], su.[lotId]), pu.[unidade] = ISNULL(pu.[unidade], p.[unidade]) FROM [dbo].[ProductUsage] pu INNER JOIN [dbo].[StockUnit] su ON pu.[stockUnitId] = su.[id] INNER JOIN [dbo].[ProductLot] pl ON su.[lotId] = pl.[id] INNER JOIN [dbo].[Product] p ON pl.[productId] = p.[id] WHERE pu.[productId] IS NULL OR pu.[lotId] IS NULL OR pu.[unidade] IS NULL;`,
       ];
 
       for (const sql of statements) {

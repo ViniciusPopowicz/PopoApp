@@ -36,10 +36,12 @@ import {
   ShieldAlert,
   CheckCircle2,
   Paperclip,
+  Eye,
 } from 'lucide-react';
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/format';
 import { formatCpf } from '@/lib/cpf';
 import { ClientFormDialog, ClientFormData } from '@/components/clientes/client-form-dialog';
+import { useAppDialogs } from '@/components/shared/app-dialogs';
 
 interface ClientWorkspaceProps {
   clientId: string;
@@ -93,13 +95,19 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
     fetchClientData();
   }, [fetchClientData]);
 
+  const { confirm, alert, DialogsNode } = useAppDialogs();
+
   // Profile photo upload handler
   async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      alert('Por favor, selecione um arquivo de imagem válido (JPG, PNG, WebP).');
+      await alert({
+        title: 'Arquivo Inválido',
+        description: 'Por favor, selecione um arquivo de imagem válido (JPG, PNG, WebP).',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -120,7 +128,11 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
 
       await fetchClientData();
     } catch (err: any) {
-      alert(err.message || 'Erro ao fazer upload da foto');
+      await alert({
+        title: 'Erro no Upload da Foto',
+        description: err.message || 'Erro ao fazer upload da foto',
+        variant: 'destructive',
+      });
     } finally {
       setIsUpdatingPhoto(false);
     }
@@ -131,7 +143,11 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
     e.preventDefault();
     const rawContactPhone = unmaskPhoneBR(newContactTelefone);
     if (!newContactNome.trim() || rawContactPhone.length < 10 || !newContactParentesco.trim()) {
-      alert('Preencha nome, telefone válido com DDD e parentesco.');
+      await alert({
+        title: 'Campos Obrigatórios',
+        description: 'Preencha nome, telefone válido com DDD e parentesco.',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -160,12 +176,22 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
       setIsAddingContact(false);
       fetchClientData();
     } catch (err: any) {
-      alert(err.message || 'Erro ao cadastrar contato de emergência.');
+      await alert({
+        title: 'Erro ao Cadastrar Contato',
+        description: err.message || 'Erro ao cadastrar contato de emergência.',
+        variant: 'destructive',
+      });
     }
   }
 
   async function handleDeleteContact(contactId: string) {
-    if (!window.confirm('Deseja remover este contato de emergência?')) return;
+    const confirmed = await confirm({
+      title: 'Remover Contato de Emergência',
+      description: 'Deseja remover este contato de emergência?',
+      confirmLabel: 'Remover',
+      variant: 'destructive',
+    });
+    if (!confirmed) return;
     try {
       const res = await fetch(`/api/clients/${clientId}/contacts/${contactId}`, {
         method: 'DELETE',
@@ -176,7 +202,11 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
       }
       fetchClientData();
     } catch (err: any) {
-      alert(err.message || 'Falha ao remover contato');
+      await alert({
+        title: 'Erro ao Remover Contato',
+        description: err.message || 'Falha ao remover contato',
+        variant: 'destructive',
+      });
     }
   }
 
@@ -218,7 +248,13 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
   }
 
   async function handleDeleteAttachment(attachmentId: string) {
-    if (!window.confirm('Tem certeza que deseja excluir permanentemente este documento?')) return;
+    const confirmed = await confirm({
+      title: 'Excluir Documento',
+      description: 'Tem certeza que deseja excluir permanentemente este documento?',
+      confirmLabel: 'Excluir',
+      variant: 'destructive',
+    });
+    if (!confirmed) return;
     try {
       const res = await fetch(`/api/attachments/${attachmentId}`, {
         method: 'DELETE',
@@ -229,7 +265,11 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
       }
       fetchClientData();
     } catch (err: any) {
-      alert(err.message || 'Falha ao excluir documento');
+      await alert({
+        title: 'Erro ao Excluir Documento',
+        description: err.message || 'Falha ao excluir documento',
+        variant: 'destructive',
+      });
     }
   }
 
@@ -351,7 +391,7 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
               </h1>
               <StatusBadge status={client.status} />
             </div>
-            <p className="text-sm text-muted-foreground font-mono">
+            <p className="text-sm text-muted-foreground">
               CPF: {formatCpf(client.cpf)} • Tel: {client.telefone}
             </p>
           </div>
@@ -440,7 +480,7 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <span className="text-xs text-muted-foreground block">CPF</span>
-                    <span className="font-mono font-medium">{formatCpf(client.cpf)}</span>
+                    <span className="font-medium">{formatCpf(client.cpf)}</span>
                   </div>
                   <div>
                     <span className="text-xs text-muted-foreground block">Status</span>
@@ -620,6 +660,7 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
                         <TableHead>Status</TableHead>
                         <TableHead>Procedimentos Planejados</TableHead>
                         <TableHead>Observações</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -648,6 +689,22 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground max-w-xs truncate">
                             {appt.observacoes || '-'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              asChild
+                              title="Visualizar detalhes do agendamento"
+                            >
+                              <Link
+                                href={`/agenda?appointmentId=${appt.id}`}
+                                aria-label="Visualizar agendamento"
+                              >
+                                <Eye className="h-4 w-4 text-primary" />
+                              </Link>
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -700,11 +757,28 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
                             </span>
                             <StatusBadge status={att.status} />
                           </div>
-                          <div className="text-sm font-medium">
-                            Total Líquido:{' '}
-                            <span className="text-primary font-bold">
-                              {formatCurrency(attNetTotal)}
-                            </span>
+                          <div className="flex items-center gap-3">
+                            <div className="text-sm font-medium">
+                              Total Líquido:{' '}
+                              <span className="text-primary font-bold">
+                                {formatCurrency(attNetTotal)}
+                              </span>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1.5 text-xs"
+                              asChild
+                              title="Visualizar detalhes do atendimento"
+                            >
+                              <Link
+                                href={`/atendimentos/${att.id}`}
+                                aria-label="Visualizar atendimento"
+                              >
+                                <Eye className="h-3.5 w-3.5 text-primary" />
+                                <span>Visualizar</span>
+                              </Link>
+                            </Button>
                           </div>
                         </div>
 
@@ -755,7 +829,13 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
                               Prontuário Clínico:
                             </span>
                             <p className="text-muted-foreground bg-muted/20 p-2 rounded line-clamp-2">
-                              {att.medicalRecord.observacoes || 'Sem anotações complementares.'}
+                              {att.medicalRecord.condutaProcedimento ||
+                                att.medicalRecord.queixaPrincipal ||
+                                att.medicalRecord.avaliacaoClinica ||
+                                att.medicalRecord.observacoesLimpa ||
+                                att.medicalRecord.intercorrencias ||
+                                att.medicalRecord.observacoes ||
+                                'Sem anotações complementares.'}
                             </p>
                           </div>
                         )}
@@ -797,13 +877,15 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
                         <TableHead>Código Serial (StockUnit)</TableHead>
                         <TableHead>Classificação</TableHead>
                         <TableHead>Status da Unidade</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {productUsages.map((usage: any) => {
                         const unit = usage.stockUnit;
-                        const lot = unit?.lot;
-                        const product = lot?.product;
+                        const lot = unit?.lot || usage.lot;
+                        const product = lot?.product || usage.product;
+                        const targetProductId = product?.id || usage.productId;
 
                         return (
                           <TableRow key={usage.id}>
@@ -814,10 +896,10 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
                               <div className="font-semibold">{product?.nome || 'Produto'}</div>
                               <div className="text-xs text-muted-foreground">{product?.marca || '-'}</div>
                             </TableCell>
-                            <TableCell className="font-mono text-xs">
+                            <TableCell className="text-xs">
                               {lot?.numeroLote || '-'}
                             </TableCell>
-                            <TableCell className="font-mono text-xs font-semibold text-primary">
+                            <TableCell className="text-xs font-semibold text-primary">
                               {unit?.codigoSerial || '-'}
                             </TableCell>
                             <TableCell>
@@ -827,6 +909,24 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
                             </TableCell>
                             <TableCell>
                               <StatusBadge status={unit?.status || 'Disponivel'} />
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {targetProductId && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  asChild
+                                  title="Visualizar detalhes do produto"
+                                >
+                                  <Link
+                                    href={`/produtos?productId=${targetProductId}`}
+                                    aria-label="Visualizar produto"
+                                  >
+                                    <Eye className="h-4 w-4 text-primary" />
+                                  </Link>
+                                </Button>
+                              )}
                             </TableCell>
                           </TableRow>
                         );
@@ -851,22 +951,43 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                  {stockUnits.map((unit: any) => (
-                    <div key={unit.id} className="p-3 border rounded-lg bg-card space-y-1">
-                      <div className="flex justify-between items-start">
-                        <span className="font-semibold text-xs text-foreground">
-                          {unit.lot?.product?.nome || 'Produto'}
-                        </span>
-                        <StatusBadge status={unit.status} />
+                  {stockUnits.map((unit: any) => {
+                    const targetProductId = unit.lot?.product?.id || unit.lot?.productId;
+                    return (
+                      <div key={unit.id} className="p-3 border rounded-lg bg-card space-y-1">
+                        <div className="flex justify-between items-start gap-2">
+                          <span className="font-semibold text-xs text-foreground">
+                            {unit.lot?.product?.nome || 'Produto'}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <StatusBadge status={unit.status} />
+                            {targetProductId && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                asChild
+                                title="Visualizar detalhes do produto"
+                              >
+                                <Link
+                                  href={`/produtos?productId=${targetProductId}`}
+                                  aria-label="Visualizar produto"
+                                >
+                                  <Eye className="h-3.5 w-3.5 text-primary" />
+                                </Link>
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-xs text-primary font-bold">
+                          Serial: {unit.codigoSerial}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Lote: {unit.lot?.numeroLote}
+                        </p>
                       </div>
-                      <p className="text-xs font-mono text-primary font-bold">
-                        Serial: {unit.codigoSerial}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground">
-                        Lote: {unit.lot?.numeroLote}
-                      </p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
@@ -895,10 +1016,22 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
                     .filter((att: any) => att.medicalRecord)
                     .map((att: any) => {
                       const record = att.medicalRecord;
+                      const anamneseText =
+                        record.anamnese || record.queixaPrincipal || record.avaliacaoClinica;
+                      const evolucaoText = record.evolucaoClinica || record.condutaProcedimento;
+                      const orientacoesText =
+                        record.orientacoesPosProcedimento || record.orientacoes;
+                      const intercorrenciasText = record.intercorrencias;
+                      const baseObsText =
+                        record.observacoesLimpa !== undefined
+                          ? record.observacoesLimpa
+                          : record.intercorrencias
+                            ? null
+                            : record.observacoes;
                       return (
                         <div key={record.id} className="border rounded-lg p-4 bg-card space-y-3">
-                          <div className="flex justify-between items-center border-b pb-2">
-                            <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap justify-between items-center gap-2 border-b pb-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <span className="font-semibold text-sm">
                                 Sessão de {formatDateTime(new Date(att.dataHora))}
                               </span>
@@ -907,19 +1040,76 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
                                   'Procedimento'}
                               </Badge>
                             </div>
-                            <span className="text-xs text-muted-foreground font-mono">
-                              Prontuário #{record.id.slice(0, 8)}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground">
+                                Prontuário #{record.id.slice(0, 8)}
+                              </span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 gap-1.5 text-xs"
+                                asChild
+                                title="Visualizar atendimento que originou este prontuário"
+                              >
+                                <Link
+                                  href={`/atendimentos/${att.id}`}
+                                  aria-label="Visualizar atendimento do prontuário"
+                                >
+                                  <Eye className="h-3.5 w-3.5 text-primary" />
+                                  <span>Ver Atendimento</span>
+                                </Link>
+                              </Button>
+                            </div>
                           </div>
 
                           <div className="text-xs space-y-2">
-                            {record.observacoes && (
+                            {anamneseText && (
                               <div>
                                 <span className="font-semibold text-muted-foreground block">
-                                  Evolução Clínica / Anotações:
+                                  Anamnese / Queixa Principal:
                                 </span>
                                 <p className="text-foreground bg-muted/20 p-2.5 rounded whitespace-pre-wrap">
-                                  {record.observacoes}
+                                  {anamneseText}
+                                </p>
+                              </div>
+                            )}
+                            {evolucaoText && (
+                              <div>
+                                <span className="font-semibold text-muted-foreground block">
+                                  Evolução Clínica e Conduta do Procedimento:
+                                </span>
+                                <p className="text-foreground bg-muted/20 p-2.5 rounded whitespace-pre-wrap">
+                                  {evolucaoText}
+                                </p>
+                              </div>
+                            )}
+                            {orientacoesText && (
+                              <div>
+                                <span className="font-semibold text-muted-foreground block">
+                                  Orientações Pós-Procedimento:
+                                </span>
+                                <p className="text-foreground bg-muted/20 p-2.5 rounded whitespace-pre-wrap">
+                                  {orientacoesText}
+                                </p>
+                              </div>
+                            )}
+                            {intercorrenciasText && (
+                              <div>
+                                <span className="font-semibold text-muted-foreground block">
+                                  Intercorrências ou Reações Adversas:
+                                </span>
+                                <p className="text-foreground bg-muted/20 p-2.5 rounded whitespace-pre-wrap">
+                                  {intercorrenciasText}
+                                </p>
+                              </div>
+                            )}
+                            {baseObsText && (
+                              <div>
+                                <span className="font-semibold text-muted-foreground block">
+                                  Observações:
+                                </span>
+                                <p className="text-foreground bg-muted/20 p-2.5 rounded whitespace-pre-wrap">
+                                  {baseObsText}
                                 </p>
                               </div>
                             )}
@@ -1209,6 +1399,7 @@ export function ClientWorkspace({ clientId }: ClientWorkspaceProps) {
         }}
         onSuccess={fetchClientData}
       />
+      {DialogsNode}
     </div>
   );
 }

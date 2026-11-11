@@ -38,6 +38,7 @@ import {
   TrendingDown,
 } from 'lucide-react';
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/format';
+import { useAppDialogs } from '@/components/shared/app-dialogs';
 import { StatusBadge } from '@/components/shared/status-badge';
 
 interface PixInstallment {
@@ -220,9 +221,16 @@ export function AttendanceFinancialSection({
     }
   };
 
+  const { confirm, alert, DialogsNode } = useAppDialogs();
+
   // Pay individual PIX installment
   const handlePayInstallment = async (installmentId: string) => {
-    if (!confirm('Deseja dar baixa manual no pagamento desta parcela PIX?')) return;
+    const confirmed = await confirm({
+      title: 'Baixa Manual de Parcela PIX',
+      description: 'Deseja dar baixa manual no pagamento desta parcela PIX?',
+      confirmLabel: 'Confirmar Baixa',
+    });
+    if (!confirmed) return;
     try {
       setLoading(true);
       const res = await fetch(`/api/pix-installments/${installmentId}/pay`, {
@@ -234,7 +242,11 @@ export function AttendanceFinancialSection({
       }
       await onRefresh();
     } catch (err: any) {
-      alert(err.message || 'Erro ao registrar baixa da parcela PIX.');
+      await alert({
+        title: 'Erro na Baixa PIX',
+        description: err.message || 'Erro ao registrar baixa da parcela PIX.',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -274,26 +286,14 @@ export function AttendanceFinancialSection({
             </CardDescription>
           </div>
 
-          <div className="flex items-center gap-2">
-            {financials.netTotal > 0 && financials.isFullyPaid ? (
-              <Badge variant="default" className="bg-success text-success-foreground">
-                Quitado
-              </Badge>
-            ) : financials.netTotal === 0 ? (
-              <Badge variant="outline">Sem Cobrança</Badge>
-            ) : (
-              <Badge variant="outline" className="text-destructive border-destructive/30">
-                Saldo Devedor: {formatCurrency(financials.outstandingBalance)}
-              </Badge>
-            )}
-
-            {isEditable && (
+          {isEditable && (
+            <div className="flex items-center gap-2">
               <Button size="sm" onClick={openPaymentDialog} className="gap-1.5">
                 <Plus className="h-4 w-4" />
                 <span>Registrar Pagamento</span>
               </Button>
-            )}
-          </div>
+            </div>
+          )}
         </CardHeader>
 
         <CardContent>
@@ -646,6 +646,7 @@ export function AttendanceFinancialSection({
           </Tabs>
         </DialogContent>
       </Dialog>
+      {DialogsNode}
     </div>
   );
 }

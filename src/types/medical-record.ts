@@ -8,6 +8,10 @@ export interface MedicalRecordDto {
   condutaProcedimento: string | null;
   orientacoes: string | null;
   observacoes: string | null;
+  anamnese?: string | null;
+  evolucaoClinica?: string | null;
+  orientacoesPosProcedimento?: string | null;
+  intercorrencias?: string | null;
   createdAt: string;
   updatedAt: string;
   attendance?: {

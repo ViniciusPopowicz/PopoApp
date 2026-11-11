@@ -27,6 +27,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { formatDateTime } from '@/lib/format';
+import { useAppDialogs } from '@/components/shared/app-dialogs';
 
 interface ProductUsageItem {
   id: string;
@@ -242,10 +243,24 @@ export function AttendanceProductUsagesSection({
     }
   };
 
+  const { prompt, alert, DialogsNode } = useAppDialogs();
+  const [reversingId, setReversingId] = useState<string | null>(null);
+
   const handleReverseUsage = async (usageId: string) => {
-    const motivo = prompt('Informe o motivo do estorno deste consumo de estoque:', 'Correção de lançamento');
+    if (reversingId) return;
+    const motivo = await prompt({
+      title: 'Estornar Consumo de Estoque',
+      description: 'Informe o motivo do estorno deste consumo para restaurar o saldo no estoque:',
+      label: 'Motivo do estorno',
+      defaultValue: 'Correção de lançamento',
+      confirmLabel: 'Confirmar Estorno',
+      variant: 'destructive',
+      required: true,
+    });
     if (!motivo) return;
     try {
+      setReversingId(usageId);
+      setError(null);
       const res = await fetch(`/api/attendances/${attendanceId}/usages/${usageId}/reverse`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -253,13 +268,23 @@ export function AttendanceProductUsagesSection({
       });
       const json = await res.json();
       if (!res.ok || !json.success) {
-        alert(json.error || 'Erro ao estornar consumo');
+        await alert({
+          title: 'Erro ao Estornar Consumo',
+          description: json.error || 'Erro ao estornar consumo',
+          variant: 'destructive',
+        });
         return;
       }
       await fetchUsages();
       await onRefresh();
     } catch (err: any) {
-      alert(err.message || 'Erro ao estornar consumo');
+      await alert({
+        title: 'Erro ao Estornar Consumo',
+        description: err.message || 'Erro ao estornar consumo',
+        variant: 'destructive',
+      });
+    } finally {
+      setReversingId(null);
     }
   };
 
@@ -329,7 +354,7 @@ export function AttendanceProductUsagesSection({
 
                   return (
                     <TableRow key={u.id} className={isReversed ? 'opacity-50' : ''}>
-                      <TableCell className="font-mono text-xs font-semibold">
+                      <TableCell className="text-xs font-semibold">
                         <span className="flex items-center gap-1.5">
                           <QrCode className="h-3.5 w-3.5 text-muted-foreground" />
                           {serialOrLot}
@@ -360,11 +385,12 @@ export function AttendanceProductUsagesSection({
                             variant="ghost"
                             size="sm"
                             className="h-7 text-xs"
+                            disabled={reversingId === u.id}
                             onClick={() => handleReverseUsage(u.id)}
                             title="Estornar consumo e devolver ao estoque"
                           >
                             <RotateCcw className="h-3.5 w-3.5 mr-1" />
-                            Estornar
+                            {reversingId === u.id ? 'Estornando...' : 'Estornar'}
                           </Button>
                         )}
                       </TableCell>
@@ -508,6 +534,7 @@ export function AttendanceProductUsagesSection({
           </form>
         </DialogContent>
       </Dialog>
+      {DialogsNode}
     </Card>
   );
 }

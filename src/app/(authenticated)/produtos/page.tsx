@@ -123,6 +123,17 @@ export default function ProdutosEstoquePage() {
     fetchProducts();
   }, [fetchProducts]);
 
+  // Deep-link support (?productId=...) from Client Details (MELHORIA-015)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const targetProdId = params.get('productId');
+    if (targetProdId) {
+      setSelectedProductId(targetProdId);
+      setDetailSheetOpen(true);
+    }
+  }, []);
+
   useEffect(() => {
     if (activeTab === 'unidades') {
       fetchUnits();
@@ -685,7 +696,7 @@ export default function ProdutosEstoquePage() {
                         u.dataValidade !== null && new Date(u.dataValidade) < new Date();
                       return (
                         <TableRow key={u.id}>
-                          <TableCell className="font-mono text-xs font-semibold">
+                          <TableCell className="text-xs font-semibold">
                             {u.codigoSerial}
                           </TableCell>
                           <TableCell>

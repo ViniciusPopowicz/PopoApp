@@ -41,10 +41,19 @@ export function AttendanceMedicalRecordSection({
           const json = await res.json();
           if (json.success && json.data) {
             setRecordExists(true);
-            setAnamnese(json.data.anamnese || json.data.queixaPrincipal || '');
-            setEvolucaoClinica(json.data.evolucaoClinica || json.data.condutaProcedimento || json.data.avaliacaoClinica || '');
-            setOrientacoesPosProcedimento(json.data.orientacoesPosProcedimento || json.data.orientacoes || '');
-            setIntercorrencias(json.data.intercorrencias || '');
+            setAnamnese(
+              json.data.anamnese ??
+                json.data.queixaPrincipal ??
+                json.data.avaliacaoClinica ??
+                ''
+            );
+            setEvolucaoClinica(
+              json.data.evolucaoClinica ?? json.data.condutaProcedimento ?? ''
+            );
+            setOrientacoesPosProcedimento(
+              json.data.orientacoesPosProcedimento ?? json.data.orientacoes ?? ''
+            );
+            setIntercorrencias(json.data.intercorrencias ?? '');
             setLastUpdated(json.data.updatedAt || json.data.createdAt);
           }
         }
@@ -66,10 +75,10 @@ export function AttendanceMedicalRecordSection({
       setSuccessMessage(null);
 
       const payload = {
-        anamnese: anamnese.trim() || undefined,
-        evolucaoClinica: evolucaoClinica.trim() || undefined,
-        orientacoesPosProcedimento: orientacoesPosProcedimento.trim() || undefined,
-        intercorrencias: intercorrencias.trim() || undefined,
+        anamnese: anamnese.trim(),
+        evolucaoClinica: evolucaoClinica.trim(),
+        orientacoesPosProcedimento: orientacoesPosProcedimento.trim(),
+        intercorrencias: intercorrencias.trim(),
       };
 
       const method = recordExists ? 'PUT' : 'POST';

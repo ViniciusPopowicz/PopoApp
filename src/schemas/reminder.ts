@@ -141,3 +141,53 @@ export type UpdateReminderStatusInput = z.infer<typeof updateReminderStatusSchem
 export type CreateReminderRecurrenceInput = z.input<typeof createReminderRecurrenceSchema>;
 export type UpdateReminderRecurrenceInput = z.infer<typeof updateReminderRecurrenceSchema>;
 export type ReminderQueryParams = z.input<typeof reminderQuerySchema>;
+
+export interface KanbanGroupedReminders<T> {
+  pendente: T[];
+  concluido: T[];
+  dispensado: T[];
+}
+
+export const REMINDER_KANBAN_COLUMNS = [
+  { key: 'pendente' as const, title: 'Pendentes' },
+  { key: 'concluido' as const, title: 'Concluídos' },
+  { key: 'dispensado' as const, title: 'Dispensados' },
+];
+
+export function groupRemindersByKanbanColumn<
+  T extends { status: string; dataVencimento?: string | Date | null }
+>(reminders: T[] | null | undefined): KanbanGroupedReminders<T> {
+  const groups: KanbanGroupedReminders<T> = {
+    pendente: [],
+    concluido: [],
+    dispensado: [],
+  };
+
+  if (!Array.isArray(reminders)) {
+    return groups;
+  }
+
+  for (const item of reminders) {
+    if (!item) continue;
+    if (item.status === 'concluido') {
+      groups.concluido.push(item);
+    } else if (item.status === 'dispensado') {
+      groups.dispensado.push(item);
+    } else {
+      groups.pendente.push(item);
+    }
+  }
+
+  const sortByDueDate = (a: T, b: T) => {
+    const tA = a.dataVencimento ? new Date(a.dataVencimento).getTime() : 0;
+    const tB = b.dataVencimento ? new Date(b.dataVencimento).getTime() : 0;
+    if (isNaN(tA) || isNaN(tB)) return 0;
+    return tA - tB;
+  };
+
+  groups.pendente.sort(sortByDueDate);
+  groups.concluido.sort(sortByDueDate);
+  groups.dispensado.sort(sortByDueDate);
+
+  return groups;
+}

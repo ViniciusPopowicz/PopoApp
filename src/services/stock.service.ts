@@ -1,6 +1,7 @@
 import prisma from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
-import { NotFoundError, ConflictError, ValidationError } from '@/lib/errors';
+import { NotFoundError, ConflictError, ValidationError, DomainError } from '@/lib/errors';
+import { ensureDatabaseSchema } from '@/lib/db-bootstrap';
 import {
   CreateLotInput,
   RegisterUnitsInput,
@@ -24,6 +25,59 @@ import {
 
 function round3(val: number): number {
   return Math.round((val + Number.EPSILON) * 1000) / 1000;
+}
+
+const TRANSIENT_PRISMA_CODES = new Set([
+  'P1001',
+  'P1002',
+  'P1008',
+  'P1017',
+  'P2024',
+  'P2028',
+  'P2034',
+]);
+
+function isTransientDatabaseError(err: unknown): boolean {
+  if (!err || err instanceof DomainError) return false;
+  const anyErr = err as any;
+  if (typeof anyErr.statusCode === 'number' && anyErr.statusCode >= 400 && anyErr.statusCode < 500) {
+    return false;
+  }
+  if (typeof anyErr.code === 'string' && TRANSIENT_PRISMA_CODES.has(anyErr.code)) {
+    return true;
+  }
+  const msg = String(anyErr.message || '').toLowerCase();
+  return (
+    msg.includes('transaction already closed') ||
+    msg.includes('unable to start a transaction') ||
+    msg.includes('deadlock') ||
+    msg.includes('connection') ||
+    msg.includes('timed out') ||
+    msg.includes('socket')
+  );
+}
+
+async function withTransactionRetry<T>(
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+  maxAttempts = 3
+): Promise<T> {
+  await ensureDatabaseSchema();
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await prisma.$transaction(fn, {
+        maxWait: 10000,
+        timeout: 20000,
+      });
+    } catch (err) {
+      lastError = err;
+      if (!isTransientDatabaseError(err) || attempt >= maxAttempts) {
+        throw err;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 60 * attempt));
+    }
+  }
+  throw lastError;
 }
 
 function formatMovementDto(raw: any): InventoryMovementDto {
@@ -852,88 +906,120 @@ export async function reverseProductUsage(
   usageId: string,
   input: ReverseProductUsageInput
 ): Promise<ProductUsageSummaryDto> {
-  const reversed = await prisma.$transaction(async (tx) => {
-    const usage = await tx.productUsage.findUnique({
-      where: { id: usageId },
-      include: {
-        attendance: { include: { client: true } },
-        stockUnit: { include: { lot: { include: { product: true } } } },
-        lot: { include: { product: true } },
-        product: true,
-        attendanceProcedure: { include: { procedure: true } },
-        inventoryMovements: true,
+  await ensureDatabaseSchema();
+
+  const reason = (input?.motivo ?? '').trim();
+  if (!reason) {
+    throw new ValidationError('Informe o motivo do estorno do consumo');
+  }
+
+  const initialUsage = await prisma.productUsage.findUnique({
+    where: { id: usageId },
+    include: {
+      attendance: { include: { client: true } },
+      stockUnit: { include: { lot: { include: { product: true } } } },
+      lot: { include: { product: true } },
+      product: true,
+      attendanceProcedure: { include: { procedure: true } },
+      inventoryMovements: true,
+    },
+  });
+
+  if (!initialUsage) {
+    throw new NotFoundError('Registro de consumo de produto não encontrado');
+  }
+
+  if (initialUsage.status === 'Estornado') {
+    throw new ValidationError('Este consumo de produto já foi estornado');
+  }
+
+  const now = new Date();
+  const qty = round3(Number(initialUsage.quantidade ?? 1));
+  const resolvedLot = initialUsage.lot ?? initialUsage.stockUnit?.lot ?? null;
+  const resolvedProduct = initialUsage.product ?? resolvedLot?.product ?? null;
+
+  await withTransactionRetry(async (tx) => {
+    // 1. Atomically claim the reversal on ProductUsage first to prevent race conditions and duplicate restorations
+    const claimed = await tx.productUsage.updateMany({
+      where: {
+        id: usageId,
+        status: { not: 'Estornado' },
       },
-    });
-
-    if (!usage) {
-      throw new NotFoundError('Registro de consumo de produto não encontrado');
-    }
-
-    if (usage.status === 'Estornado') {
-      throw new ValidationError('Este consumo de produto já foi estornado');
-    }
-
-    const now = new Date();
-    const reason = input.motivo.trim();
-    const qty = round3(Number(usage.quantidade ?? 1));
-    const resolvedLot = usage.lot ?? usage.stockUnit?.lot;
-    const resolvedProduct = usage.product ?? resolvedLot?.product;
-
-    let saldoAnterior = 0;
-    let saldoPosterior = 0;
-
-    if (resolvedLot) {
-      saldoAnterior = round3(Number(resolvedLot.quantidadeDisponivel ?? 0));
-      saldoPosterior = round3(saldoAnterior + qty);
-
-      await tx.productLot.update({
-        where: { id: resolvedLot.id },
-        data: {
-          quantidadeDisponivel: new Prisma.Decimal(saldoPosterior),
-        },
-      });
-    }
-
-    if (usage.stockUnitId && usage.stockUnit) {
-      const remainingActiveUsages = await tx.productUsage.count({
-        where: {
-          stockUnitId: usage.stockUnitId,
-          id: { not: usageId },
-          status: 'Ativo',
-        },
-      });
-
-      const unitInit = round3(Number(usage.stockUnit.quantidadeInicial ?? 1));
-      const unitAvail = round3(Number(usage.stockUnit.quantidadeDisponivel ?? 0));
-      const restoredUnitAvail = round3(Math.min(unitInit, unitAvail + qty));
-
-      await tx.stockUnit.update({
-        where: { id: usage.stockUnitId },
-        data: {
-          quantidadeDisponivel: new Prisma.Decimal(restoredUnitAvail),
-          status: remainingActiveUsages === 0 ? 'Disponivel' : 'EmUso',
-          currentClientId: remainingActiveUsages === 0 ? null : usage.stockUnit.currentClientId,
-        },
-      });
-    }
-
-    const updatedUsage = await tx.productUsage.update({
-      where: { id: usageId },
       data: {
         status: 'Estornado',
         reversedAt: now,
         reversalReason: reason,
       },
-      include: {
-        attendance: { include: { client: true } },
-        stockUnit: { include: { lot: { include: { product: true } } } },
-        lot: { include: { product: true } },
-        product: true,
-        attendanceProcedure: { include: { procedure: true } },
-      },
     });
 
-    const origMovement = usage.inventoryMovements.find((m) => m.status === 'Ativo');
+    if (claimed.count === 0) {
+      throw new ValidationError('Este consumo de produto já foi estornado');
+    }
+
+    let saldoAnterior = 0;
+    let saldoPosterior = 0;
+    const origMovement = initialUsage.inventoryMovements.find((m) => m.status === 'Ativo');
+    const lotDelta =
+      origMovement && origMovement.saldoAnterior != null && origMovement.saldoPosterior != null
+        ? Math.max(
+            0,
+            round3(Number(origMovement.saldoAnterior) - Number(origMovement.saldoPosterior))
+          )
+        : qty;
+
+    // 2. Restore ProductLot available quantity using current transactional balance
+    if (resolvedLot) {
+      const currentLot = await tx.productLot.findUnique({
+        where: { id: resolvedLot.id },
+      });
+      if (!currentLot) {
+        throw new NotFoundError('Lote vinculado ao consumo não encontrado');
+      }
+      saldoAnterior = round3(Number(currentLot.quantidadeDisponivel ?? 0));
+      saldoPosterior = round3(saldoAnterior + lotDelta);
+
+      if (lotDelta > 0) {
+        await tx.productLot.update({
+          where: { id: currentLot.id },
+          data: {
+            quantidadeDisponivel: new Prisma.Decimal(saldoPosterior),
+          },
+        });
+      }
+    }
+
+    // 3. Restore StockUnit available quantity and status if consumption was tied to a unit
+    if (initialUsage.stockUnitId) {
+      const currentUnit = await tx.stockUnit.findUnique({
+        where: { id: initialUsage.stockUnitId },
+      });
+      if (!currentUnit) {
+        throw new NotFoundError('Unidade de estoque vinculada ao consumo não encontrada');
+      }
+
+      const remainingActiveUsages = await tx.productUsage.count({
+        where: {
+          stockUnitId: initialUsage.stockUnitId,
+          id: { not: usageId },
+          status: 'Ativo',
+        },
+      });
+
+      const unitInit = round3(Number(currentUnit.quantidadeInicial ?? 1));
+      const unitAvail = round3(Number(currentUnit.quantidadeDisponivel ?? 0));
+      const restoredUnitAvail = round3(Math.min(unitInit, unitAvail + qty));
+
+      await tx.stockUnit.update({
+        where: { id: initialUsage.stockUnitId },
+        data: {
+          quantidadeDisponivel: new Prisma.Decimal(restoredUnitAvail),
+          status: remainingActiveUsages === 0 ? 'Disponivel' : 'EmUso',
+          currentClientId: remainingActiveUsages === 0 ? null : currentUnit.currentClientId,
+        },
+      });
+    }
+
+    // 4. Mark original InventoryMovement as Estornado and record compensating REVERSAO movement
     if (origMovement) {
       await tx.inventoryMovement.update({
         where: { id: origMovement.id },
@@ -950,12 +1036,12 @@ export async function reverseProductUsage(
         data: {
           productId: resolvedProduct.id,
           lotId: resolvedLot?.id ?? null,
-          stockUnitId: usage.stockUnitId ?? null,
-          attendanceId: usage.attendanceId,
-          productUsageId: usage.id,
+          stockUnitId: initialUsage.stockUnitId ?? null,
+          attendanceId: initialUsage.attendanceId,
+          productUsageId: initialUsage.id,
           tipo: 'REVERSAO',
           quantidade: new Prisma.Decimal(qty),
-          unidade: usage.unidade ?? resolvedProduct.unidade,
+          unidade: initialUsage.unidade ?? resolvedProduct.unidade ?? 'un',
           saldoAnterior: new Prisma.Decimal(saldoAnterior),
           saldoPosterior: new Prisma.Decimal(saldoPosterior),
           motivo: reason,
@@ -964,36 +1050,31 @@ export async function reverseProductUsage(
         },
       });
     }
-
-    return updatedUsage;
   });
 
-  const resolvedProduct = reversed.stockUnit?.lot?.product ?? reversed.lot?.product ?? reversed.product;
-  const resolvedLot = reversed.stockUnit?.lot ?? reversed.lot;
-
   return {
-    id: reversed.id,
-    attendanceId: reversed.attendanceId,
-    attendanceDate: reversed.attendance.dataHora.toISOString(),
-    clientId: reversed.attendance.clientId,
-    clientName: reversed.attendance.client.nome,
-    stockUnitId: reversed.stockUnitId ?? null,
-    codigoSerial: reversed.stockUnit?.codigoSerial ?? null,
-    productId: resolvedProduct?.id ?? reversed.productId ?? null,
-    lotId: resolvedLot?.id ?? reversed.lotId ?? null,
+    id: initialUsage.id,
+    attendanceId: initialUsage.attendanceId,
+    attendanceDate: new Date(initialUsage.attendance.dataHora).toISOString(),
+    clientId: initialUsage.attendance.clientId,
+    clientName: initialUsage.attendance.client.nome,
+    stockUnitId: initialUsage.stockUnitId ?? null,
+    codigoSerial: initialUsage.stockUnit?.codigoSerial ?? null,
+    productId: resolvedProduct?.id ?? initialUsage.productId ?? null,
+    lotId: resolvedLot?.id ?? initialUsage.lotId ?? null,
     numeroLote: resolvedLot?.numeroLote ?? null,
     productName: resolvedProduct?.nome ?? 'Produto',
     isReusable: Boolean(resolvedProduct?.isReusable),
-    quantidade: round3(Number(reversed.quantidade ?? 1)),
-    unidade: reversed.unidade ?? resolvedProduct?.unidade ?? null,
-    status: reversed.status,
-    reversedAt: reversed.reversedAt ? reversed.reversedAt.toISOString() : null,
-    reversalReason: reversed.reversalReason ?? null,
-    attendanceProcedureId: reversed.attendanceProcedureId,
-    procedureName: reversed.attendanceProcedure?.procedure?.nome ?? null,
-    dataHora: reversed.dataHora.toISOString(),
-    observacoes: reversed.observacoes,
-    createdAt: reversed.createdAt.toISOString(),
+    quantidade: qty,
+    unidade: initialUsage.unidade ?? resolvedProduct?.unidade ?? null,
+    status: 'Estornado',
+    reversedAt: now.toISOString(),
+    reversalReason: reason,
+    attendanceProcedureId: initialUsage.attendanceProcedureId,
+    procedureName: initialUsage.attendanceProcedure?.procedure?.nome ?? null,
+    dataHora: new Date(initialUsage.dataHora).toISOString(),
+    observacoes: initialUsage.observacoes,
+    createdAt: new Date(initialUsage.createdAt).toISOString(),
   };
 }
 
@@ -1404,10 +1485,22 @@ export async function reverseInventoryMovement(
     return formatMovementDto(revMov!);
   }
 
-  const rev = await prisma.$transaction(async (tx) => {
+  const rev = await withTransactionRetry(async (tx) => {
     const now = new Date();
     const qty = round3(Number(existing.quantidade));
     const wasAddition = existing.tipo === 'ENTRADA' || existing.tipo === 'AJUSTE_POSITIVO';
+
+    const claimed = await tx.inventoryMovement.updateMany({
+      where: { id: movementId, status: { not: 'Estornado' } },
+      data: {
+        status: 'Estornado',
+        reversedAt: now,
+        reversalReason: motivo.trim(),
+      },
+    });
+    if (claimed.count === 0) {
+      throw new ValidationError('Esta movimentação de estoque já foi estornada');
+    }
 
     let saldoAnterior = 0;
     let saldoPosterior = 0;
@@ -1433,15 +1526,6 @@ export async function reverseInventoryMovement(
         });
       }
     }
-
-    await tx.inventoryMovement.update({
-      where: { id: movementId },
-      data: {
-        status: 'Estornado',
-        reversedAt: now,
-        reversalReason: motivo.trim(),
-      },
-    });
 
     return await tx.inventoryMovement.create({
       data: {
