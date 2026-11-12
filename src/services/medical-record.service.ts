@@ -1,7 +1,33 @@
 import prisma from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { ValidationError, NotFoundError, ConflictError } from '@/lib/errors';
-import { CreateMedicalRecordInput, UpdateMedicalRecordInput } from '@/schemas/medical-record';
+import { ensureDatabaseSchema } from '@/lib/db-bootstrap';
+import {
+  CreateMedicalRecordInput,
+  UpdateMedicalRecordInput,
+  extractBaseObservacoes,
+  extractIntercorrenciasFromObservacoes,
+  formatIntercorrenciasIntoObservacoes,
+} from '@/schemas/medical-record';
+
+export function enrichMedicalRecord<
+  T extends {
+    queixaPrincipal: string | null;
+    avaliacaoClinica: string | null;
+    condutaProcedimento: string | null;
+    orientacoes: string | null;
+    observacoes: string | null;
+  }
+>(record: T) {
+  return {
+    ...record,
+    anamnese: record.queixaPrincipal ?? record.avaliacaoClinica ?? null,
+    evolucaoClinica: record.condutaProcedimento ?? null,
+    orientacoesPosProcedimento: record.orientacoes ?? null,
+    intercorrencias: extractIntercorrenciasFromObservacoes(record.observacoes),
+    observacoesLimpa: extractBaseObservacoes(record.observacoes),
+  };
+}
 
 export class MedicalRecordService {
   /**
@@ -9,6 +35,8 @@ export class MedicalRecordService {
    * Strictly enforces 1:1 relationship with Attendance (V19).
    */
   static async createMedicalRecord(data: CreateMedicalRecordInput) {
+    await ensureDatabaseSchema();
+
     // 1. Verify Attendance exists
     const attendance = await prisma.attendance.findUnique({
       where: { id: data.attendanceId },
@@ -29,15 +57,29 @@ export class MedicalRecordService {
       throw new ConflictError('Atendimento já possui prontuário cadastrado (V19)');
     }
 
+    const rawAnamnese = (data as any).anamnese?.trim() || null;
+    const rawEvolucao = (data as any).evolucaoClinica?.trim() || null;
+    const rawOrientacoesPos = (data as any).orientacoesPosProcedimento?.trim() || null;
+    const rawIntercorrencias = (data as any).intercorrencias;
+
+    const queixaPrincipal = data.queixaPrincipal?.trim() || rawAnamnese || null;
+    const avaliacaoClinica = data.avaliacaoClinica?.trim() || rawAnamnese || null;
+    const condutaProcedimento = data.condutaProcedimento?.trim() || rawEvolucao || null;
+    const orientacoes = data.orientacoes?.trim() || rawOrientacoesPos || null;
+    const observacoes =
+      rawIntercorrencias !== undefined
+        ? formatIntercorrenciasIntoObservacoes(data.observacoes, rawIntercorrencias)
+        : data.observacoes?.trim() || null;
+
     try {
       const record = await prisma.medicalRecord.create({
         data: {
           attendanceId: data.attendanceId,
-          queixaPrincipal: data.queixaPrincipal ?? null,
-          avaliacaoClinica: data.avaliacaoClinica ?? (data as any).anamnese ?? null,
-          condutaProcedimento: data.condutaProcedimento ?? (data as any).evolucaoClinica ?? null,
-          orientacoes: data.orientacoes ?? (data as any).orientacoesPosProcedimento ?? null,
-          observacoes: data.observacoes ?? null,
+          queixaPrincipal,
+          avaliacaoClinica,
+          condutaProcedimento,
+          orientacoes,
+          observacoes,
         },
         include: {
           attendance: {
@@ -57,7 +99,7 @@ export class MedicalRecordService {
         },
       });
 
-      return record;
+      return enrichMedicalRecord(record);
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictError('Atendimento já possui prontuário cadastrado (V19)');
@@ -70,6 +112,8 @@ export class MedicalRecordService {
    * Retrieves medical record by attendance ID with clinical context.
    */
   static async getByAttendanceId(attendanceId: string) {
+    await ensureDatabaseSchema();
+
     const record = await prisma.medicalRecord.findUnique({
       where: { attendanceId },
       include: {
@@ -94,25 +138,68 @@ export class MedicalRecordService {
       throw new NotFoundError('Prontuário não encontrado para este atendimento');
     }
 
-    return record;
+    return enrichMedicalRecord(record);
   }
 
   /**
    * Updates clinical fields of an existing medical record.
    */
   static async updateByAttendanceId(attendanceId: string, data: UpdateMedicalRecordInput) {
+    await ensureDatabaseSchema();
+
     const existing = await prisma.medicalRecord.findUnique({
       where: { attendanceId },
-      select: { id: true },
+      select: { id: true, observacoes: true },
     });
 
     if (!existing) {
       throw new NotFoundError('Prontuário não encontrado para este atendimento');
     }
 
-    return prisma.medicalRecord.update({
+    const updatePayload: Prisma.MedicalRecordUpdateInput = {};
+
+    if (data.queixaPrincipal !== undefined) {
+      updatePayload.queixaPrincipal = data.queixaPrincipal?.trim() || null;
+    } else if ((data as any).anamnese !== undefined) {
+      updatePayload.queixaPrincipal = (data as any).anamnese?.trim() || null;
+    }
+
+    if (data.avaliacaoClinica !== undefined) {
+      updatePayload.avaliacaoClinica = data.avaliacaoClinica?.trim() || null;
+    } else if ((data as any).anamnese !== undefined) {
+      updatePayload.avaliacaoClinica = (data as any).anamnese?.trim() || null;
+    }
+
+    if (data.condutaProcedimento !== undefined) {
+      updatePayload.condutaProcedimento = data.condutaProcedimento?.trim() || null;
+    } else if ((data as any).evolucaoClinica !== undefined) {
+      updatePayload.condutaProcedimento = (data as any).evolucaoClinica?.trim() || null;
+    }
+
+    if (data.orientacoes !== undefined) {
+      updatePayload.orientacoes = data.orientacoes?.trim() || null;
+    } else if ((data as any).orientacoesPosProcedimento !== undefined) {
+      updatePayload.orientacoes = (data as any).orientacoesPosProcedimento?.trim() || null;
+    }
+
+    if ((data as any).intercorrencias !== undefined) {
+      const baseObs = data.observacoes !== undefined ? data.observacoes : existing.observacoes;
+      updatePayload.observacoes = formatIntercorrenciasIntoObservacoes(
+        baseObs,
+        (data as any).intercorrencias
+      );
+    } else if (data.observacoes !== undefined) {
+      const explicitInter = extractIntercorrenciasFromObservacoes(data.observacoes);
+      const existingInter = extractIntercorrenciasFromObservacoes(existing.observacoes);
+      updatePayload.observacoes = formatIntercorrenciasIntoObservacoes(
+        data.observacoes,
+        explicitInter ?? existingInter
+      );
+    }
+
+    const updated = await prisma.medicalRecord.update({
       where: { attendanceId },
-      data,
+      data: updatePayload,
       include: {
         attendance: {
           include: {
@@ -123,12 +210,16 @@ export class MedicalRecordService {
         },
       },
     });
+
+    return enrichMedicalRecord(updated);
   }
 
   /**
    * Retrieves all medical records for a specific client across attendances.
    */
   static async getClientMedicalRecords(clientId: string) {
+    await ensureDatabaseSchema();
+
     const client = await prisma.client.findUnique({
       where: { id: clientId },
       select: { id: true },
@@ -138,7 +229,7 @@ export class MedicalRecordService {
       throw new NotFoundError('Cliente não encontrado');
     }
 
-    return prisma.medicalRecord.findMany({
+    const records = await prisma.medicalRecord.findMany({
       where: {
         attendance: {
           clientId,
@@ -163,5 +254,7 @@ export class MedicalRecordService {
         },
       },
     });
+
+    return records.map(enrichMedicalRecord);
   }
 }

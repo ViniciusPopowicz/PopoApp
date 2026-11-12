@@ -15,6 +15,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { formatDate, formatDateTime, formatPhone } from '@/lib/format';
+import { useAppDialogs } from '@/components/shared/app-dialogs';
 
 interface AttendanceHeaderProps {
   attendance: {
@@ -39,9 +40,15 @@ interface AttendanceHeaderProps {
 
 export function AttendanceHeader({ attendance, onRefresh }: AttendanceHeaderProps) {
   const [loading, setLoading] = useState(false);
+  const { confirm, alert, DialogsNode } = useAppDialogs();
 
   const handleComplete = async () => {
-    if (!confirm('Deseja marcar este atendimento clínico como Realizado?')) return;
+    const confirmed = await confirm({
+      title: 'Concluir Atendimento Clínico',
+      description: 'Deseja marcar este atendimento clínico como Realizado?',
+      confirmLabel: 'Concluir Atendimento',
+    });
+    if (!confirmed) return;
     try {
       setLoading(true);
       const res = await fetch(`/api/attendances/${attendance.id}/complete`, {
@@ -53,14 +60,24 @@ export function AttendanceHeader({ attendance, onRefresh }: AttendanceHeaderProp
       }
       await onRefresh();
     } catch (err: any) {
-      alert(err.message || 'Erro ao concluir atendimento.');
+      await alert({
+        title: 'Erro ao Concluir Atendimento',
+        description: err.message || 'Erro ao concluir atendimento.',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
   };
 
   const handleCancel = async () => {
-    if (!confirm('Deseja realmente cancelar este atendimento clínico?')) return;
+    const confirmed = await confirm({
+      title: 'Cancelar Atendimento Clínico',
+      description: 'Deseja realmente cancelar este atendimento clínico?',
+      confirmLabel: 'Confirmar Cancelamento',
+      variant: 'destructive',
+    });
+    if (!confirmed) return;
     try {
       setLoading(true);
       const res = await fetch(`/api/attendances/${attendance.id}/cancel`, {
@@ -72,7 +89,11 @@ export function AttendanceHeader({ attendance, onRefresh }: AttendanceHeaderProp
       }
       await onRefresh();
     } catch (err: any) {
-      alert(err.message || 'Erro ao cancelar atendimento.');
+      await alert({
+        title: 'Erro ao Cancelar Atendimento',
+        description: err.message || 'Erro ao cancelar atendimento.',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -162,6 +183,7 @@ export function AttendanceHeader({ attendance, onRefresh }: AttendanceHeaderProp
           </div>
         )}
       </div>
+      {DialogsNode}
     </div>
   );
 }

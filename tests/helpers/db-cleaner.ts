@@ -1,4 +1,5 @@
 import prismaTest from './db-client';
+import { ensureDatabaseSchema } from '@/lib/db-bootstrap';
 
 /**
  * Deletes all records from the PopoAppTest database in reverse foreign-key
@@ -6,7 +7,13 @@ import prismaTest from './db-client';
  * SQL Server does not reject the delete (Msg 547). Errors are NOT swallowed:
  * a failed cleanup must fail the test run instead of leaking state.
  */
+let testSchemaBootstrapped = false;
+
 export async function cleanTestDatabase(): Promise<void> {
+  if (!testSchemaBootstrapped) {
+    await ensureDatabaseSchema(true);
+    testSchemaBootstrapped = true;
+  }
   const tablesInOrder = [
     'FinancialMovement',
     'FinancialSettlement',

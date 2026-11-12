@@ -22,6 +22,7 @@ import {
 } from '@/lib/masks';
 import { Plus, Trash2, Edit2, Sparkles, Tag, AlertCircle } from 'lucide-react';
 import { formatCurrency } from '@/lib/format';
+import { useAppDialogs } from '@/components/shared/app-dialogs';
 
 interface AttendanceProcedure {
   id: string;
@@ -198,9 +199,17 @@ export function AttendanceProceduresSection({
     }
   };
 
+  const { confirm, alert, DialogsNode } = useAppDialogs();
+
   // Remove Procedure
   const handleRemoveProcedure = async (procId: string) => {
-    if (!confirm('Deseja remover este procedimento do atendimento?')) return;
+    const confirmed = await confirm({
+      title: 'Remover Procedimento',
+      description: 'Deseja remover este procedimento do atendimento?',
+      confirmLabel: 'Remover',
+      variant: 'destructive',
+    });
+    if (!confirmed) return;
     try {
       setLoading(true);
       const res = await fetch(`/api/attendances/${attendanceId}/procedures/${procId}`, {
@@ -212,7 +221,11 @@ export function AttendanceProceduresSection({
       }
       await onRefresh();
     } catch (err: any) {
-      alert(err.message || 'Erro ao remover procedimento.');
+      await alert({
+        title: 'Erro ao Remover Procedimento',
+        description: err.message || 'Erro ao remover procedimento.',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -493,6 +506,7 @@ export function AttendanceProceduresSection({
           </form>
         </DialogContent>
       </Dialog>
+      {DialogsNode}
     </Card>
   );
 }

@@ -37,3 +37,48 @@ export function formatPhone(phone: string): string {
 export function formatNumber(value: number): string {
   return new Intl.NumberFormat('pt-BR').format(value);
 }
+
+export interface DurationProcedureLike {
+  duracaoMinutos?: number | null;
+  procedure?: {
+    duracaoMinutos?: number | null;
+  } | null;
+}
+
+export function calculateEstimatedDurationMinutes(
+  procedures: Array<DurationProcedureLike | null | undefined> | null | undefined
+): number {
+  if (!Array.isArray(procedures) || procedures.length === 0) {
+    return 0;
+  }
+
+  return procedures.reduce((sum, item) => {
+    if (!item) return sum;
+    const rawDuration =
+      item.duracaoMinutos !== undefined && item.duracaoMinutos !== null
+        ? item.duracaoMinutos
+        : item.procedure?.duracaoMinutos;
+    const numeric = Number(rawDuration);
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      return sum;
+    }
+    return sum + Math.round(numeric);
+  }, 0);
+}
+
+export function formatDurationMinutes(totalMinutes: number | null | undefined): string {
+  const numeric = Number(totalMinutes);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return '0 min';
+  }
+  const mins = Math.round(numeric);
+  if (mins < 60) {
+    return `${mins} min`;
+  }
+  const hours = Math.floor(mins / 60);
+  const rem = mins % 60;
+  if (rem === 0) {
+    return `${mins} min (${hours}h)`;
+  }
+  return `${mins} min (${hours}h ${rem}min)`;
+}

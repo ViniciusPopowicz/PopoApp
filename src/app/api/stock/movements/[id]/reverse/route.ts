@@ -26,9 +26,13 @@ export async function POST(
     const reversed = await reverseInventoryMovement(id, parsed.data.motivo);
     return NextResponse.json({ success: true, data: reversed });
   } catch (error: any) {
-    if (error instanceof DomainError) {
-      return NextResponse.json({ success: false, error: error.message }, { status: error.statusCode });
+    if (error instanceof DomainError || typeof error?.statusCode === 'number') {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: error.statusCode || 400 }
+      );
     }
+    console.error('[POST /api/stock/movements/[id]/reverse] Erro ao estornar movimentação:', error);
     return NextResponse.json(
       { success: false, error: 'Erro interno ao estornar movimentação de estoque' },
       { status: 500 }

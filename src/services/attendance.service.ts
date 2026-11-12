@@ -10,6 +10,7 @@ import {
   AttendanceListQuery,
 } from '@/schemas/attendance';
 import { AttendanceFinancialsDto } from '@/types/attendance';
+import { enrichMedicalRecord } from '@/services/medical-record.service';
 
 export class AttendanceService {
   /**
@@ -178,6 +179,9 @@ export class AttendanceService {
 
     return {
       ...attendance,
+      medicalRecord: attendance.medicalRecord
+        ? enrichMedicalRecord(attendance.medicalRecord)
+        : null,
       financials,
     };
   }

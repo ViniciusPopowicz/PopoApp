@@ -57,6 +57,7 @@ import {
 import { useDebounce } from '@/hooks/use-debounce';
 import { PAYMENT_METHOD_LABELS } from '@/types/payment';
 import { FinancialObligationDto, FinancialMovementDto } from '@/types/financial';
+import { useAppDialogs } from '@/components/shared/app-dialogs';
 
 interface FinancialSummaryData {
   period: { startDate: string; endDate: string };
@@ -467,12 +468,20 @@ export default function FinanceiroPage() {
     }
   };
 
+  const { confirm, prompt, alert, DialogsNode } = useAppDialogs();
+
   const handleCancelObligation = async (ob: FinancialObligationDto) => {
     const hasPaid = ob.paidAmount > 0;
     const msg = hasPaid
       ? 'Esta obrigação já possui pagamentos parciais. Deseja cancelar e estornar os valores recebidos/pagos?'
       : 'Deseja realmente cancelar esta obrigação financeira?';
-    if (!confirm(msg)) return;
+    const confirmed = await confirm({
+      title: 'Cancelar Obrigação Financeira',
+      description: msg,
+      confirmLabel: 'Confirmar Cancelamento',
+      variant: 'destructive',
+    });
+    if (!confirmed) return;
 
     try {
       const res = await fetch(`/api/financial/obligations/${ob.id}/cancel`, {
@@ -485,12 +494,20 @@ export default function FinanceiroPage() {
       });
       const json = await res.json();
       if (!res.ok || !json.success) {
-        alert(json.error || 'Erro ao cancelar obrigação');
+        await alert({
+          title: 'Erro ao Cancelar Obrigação',
+          description: json.error || 'Erro ao cancelar obrigação',
+          variant: 'destructive',
+        });
         return;
       }
       refreshAll();
     } catch (err: any) {
-      alert(err.message || 'Erro ao cancelar obrigação');
+      await alert({
+        title: 'Erro ao Cancelar Obrigação',
+        description: err.message || 'Erro ao cancelar obrigação',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -537,7 +554,15 @@ export default function FinanceiroPage() {
   };
 
   const handleReverseMovement = async (mov: FinancialMovementDto) => {
-    const motivo = prompt('Informe o motivo do estorno desta movimentação:', 'Correção de lançamento');
+    const motivo = await prompt({
+      title: 'Estornar Movimentação Financeira',
+      description: 'Informe o motivo do estorno desta movimentação:',
+      label: 'Motivo do estorno',
+      defaultValue: 'Correção de lançamento',
+      confirmLabel: 'Confirmar Estorno',
+      variant: 'destructive',
+      required: true,
+    });
     if (!motivo) return;
     try {
       const res = await fetch(`/api/financial/movements/${mov.id}/reverse`, {
@@ -547,12 +572,20 @@ export default function FinanceiroPage() {
       });
       const json = await res.json();
       if (!res.ok || !json.success) {
-        alert(json.error || 'Erro ao estornar movimentação');
+        await alert({
+          title: 'Erro ao Estornar Movimentação',
+          description: json.error || 'Erro ao estornar movimentação',
+          variant: 'destructive',
+        });
         return;
       }
       refreshAll();
     } catch (err: any) {
-      alert(err.message || 'Erro ao estornar movimentação');
+      await alert({
+        title: 'Erro ao Estornar Movimentação',
+        description: err.message || 'Erro ao estornar movimentação',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -1558,6 +1591,7 @@ export default function FinanceiroPage() {
           </form>
         </DialogContent>
       </Dialog>
+      {DialogsNode}
     </div>
   );
 }

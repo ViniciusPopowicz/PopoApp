@@ -8,6 +8,7 @@ import {
   EmergencyContactInput,
   ClientListQuery,
 } from '@/schemas/client';
+import { enrichMedicalRecord } from '@/services/medical-record.service';
 
 export class ClientService {
   /**
@@ -297,7 +298,13 @@ export class ClientService {
       throw new NotFoundError('Cliente não encontrado');
     }
 
-    return client;
+    return {
+      ...client,
+      attendances: client.attendances.map((att) => ({
+        ...att,
+        medicalRecord: att.medicalRecord ? enrichMedicalRecord(att.medicalRecord) : null,
+      })),
+    };
   }
 
   /**

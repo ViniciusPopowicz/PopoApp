@@ -18,6 +18,8 @@ import {
   ExternalLink,
   RefreshCw,
   X,
+  LayoutList,
+  Columns3,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -37,10 +39,12 @@ import {
 } from '@/components/ui/dialog';
 import { AppCombobox } from '@/components/ui/app-combobox';
 import { ListingToolbar } from '@/components/shared/listing-toolbar';
+import { useAppDialogs } from '@/components/shared/app-dialogs';
 import { useDebounce } from '@/hooks/use-debounce';
 import { maskDateBR, dateBRToISO, isoToDateBR } from '@/lib/masks';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { ReminderDto, ReminderPriority, ReminderStatsDto } from '@/types/reminder';
+import { groupRemindersByKanbanColumn } from '@/schemas/reminder';
 
 const PRIORITY_FILTER_OPTIONS = [
   { value: 'todas', label: 'Todas as Prioridades' },
@@ -76,6 +80,7 @@ function LembretesContent() {
     atrasados: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<'lista' | 'kanban'>('lista');
   const [statusFilter, setStatusFilter] = useState<string>('pendente');
   const [priorityFilter, setPriorityFilter] = useState<string>('todas');
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -121,7 +126,9 @@ function LembretesContent() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (statusFilter && statusFilter !== 'todos') {
+      if (viewMode === 'kanban') {
+        params.set('status', 'todos');
+      } else if (statusFilter && statusFilter !== 'todos') {
         params.set('status', statusFilter);
       } else {
         params.set('status', 'todos');
@@ -151,7 +158,7 @@ function LembretesContent() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, priorityFilter, debouncedSearch, dateFilter]);
+  }, [viewMode, statusFilter, priorityFilter, debouncedSearch, dateFilter]);
 
   const loadClientsAndLinks = useCallback(async () => {
     try {
@@ -340,7 +347,21 @@ function LembretesContent() {
     }
   };
 
+  const { confirm, DialogsNode } = useAppDialogs();
+
+  const kanbanColumns = useMemo(
+    () => groupRemindersByKanbanColumn(reminders),
+    [reminders]
+  );
+
   const handleDelete = async (id: string) => {
+    const confirmed = await confirm({
+      title: 'Excluir Lembrete',
+      description: 'Deseja realmente excluir este lembrete permanentemente?',
+      confirmLabel: 'Excluir',
+      variant: 'destructive',
+    });
+    if (!confirmed) return;
     try {
       const res = await fetch(`/api/reminders/${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -484,188 +505,424 @@ function LembretesContent() {
         }
       />
 
-      {/* Status Tabs */}
-      <div className="flex items-center justify-between">
-        <Tabs value={statusFilter} onValueChange={setStatusFilter}>
-          <TabsList>
-            <TabsTrigger value="pendente">
-              Pendentes ({stats.pendentes})
-            </TabsTrigger>
-            <TabsTrigger value="atrasado">
-              Atrasados ({stats.atrasados})
-            </TabsTrigger>
-            <TabsTrigger value="concluido">
-              Concluídos ({stats.concluidos})
-            </TabsTrigger>
-            <TabsTrigger value="dispensado">
-              Dispensados ({stats.dispensados})
-            </TabsTrigger>
-            <TabsTrigger value="todos">Todos ({stats.total})</TabsTrigger>
-          </TabsList>
-        </Tabs>
+      {/* Status Tabs & View Mode Toggle */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        {viewMode === 'lista' ? (
+          <Tabs value={statusFilter} onValueChange={setStatusFilter}>
+            <TabsList className="flex-wrap h-auto">
+              <TabsTrigger value="pendente">
+                Pendentes ({stats.pendentes})
+              </TabsTrigger>
+              <TabsTrigger value="atrasado">
+                Atrasados ({stats.atrasados})
+              </TabsTrigger>
+              <TabsTrigger value="concluido">
+                Concluídos ({stats.concluidos})
+              </TabsTrigger>
+              <TabsTrigger value="dispensado">
+                Dispensados ({stats.dispensados})
+              </TabsTrigger>
+              <TabsTrigger value="todos">Todos ({stats.total})</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        ) : (
+          <div className="text-sm text-muted-foreground font-medium">
+            Quadro Kanban agrupado por status ({reminders.length} lembrete{reminders.length === 1 ? '' : 's'})
+          </div>
+        )}
+
+        <div className="flex items-center gap-1 rounded-lg border bg-card p-1 self-start sm:self-auto">
+          <Button
+            type="button"
+            size="sm"
+            variant={viewMode === 'lista' ? 'default' : 'ghost'}
+            className="h-8 gap-1.5 text-xs"
+            onClick={() => setViewMode('lista')}
+          >
+            <LayoutList className="h-3.5 w-3.5" />
+            Lista
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={viewMode === 'kanban' ? 'default' : 'ghost'}
+            className="h-8 gap-1.5 text-xs"
+            onClick={() => setViewMode('kanban')}
+          >
+            <Columns3 className="h-3.5 w-3.5" />
+            Kanban
+          </Button>
+        </div>
       </div>
 
-      {/* Reminders List */}
-      <Card>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="p-8 text-center text-sm text-muted-foreground">
-              Carregando lembretes...
-            </div>
-          ) : reminders.length === 0 ? (
-            <div className="p-12 text-center">
+      {/* Reminders List or Kanban View */}
+      {loading ? (
+        <Card>
+          <CardContent className="p-8 text-center text-sm text-muted-foreground">
+            Carregando lembretes...
+          </CardContent>
+        </Card>
+      ) : viewMode === 'lista' ? (
+        reminders.length === 0 ? (
+          <Card>
+            <CardContent className="p-12 text-center">
               <Bell className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
               <p className="text-base font-medium">Nenhum lembrete encontrado</p>
               <p className="text-xs text-muted-foreground mt-1">
                 Não há lembretes correspondentes aos filtros selecionados.
               </p>
-            </div>
-          ) : (
-            <div className="divide-y">
-              {reminders.map((r) => (
-                <div
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3" data-testid="reminders-list-view">
+            {reminders.map((r) => {
+              const accentClass = r.isOverdue
+                ? 'border-l-4 border-l-rose-500 bg-rose-50/30 dark:bg-rose-950/10'
+                : r.status === 'concluido'
+                ? 'border-l-4 border-l-emerald-500 bg-card'
+                : r.status === 'dispensado'
+                ? 'border-l-4 border-l-slate-400 bg-muted/20'
+                : 'border-l-4 border-l-amber-500 bg-card';
+
+              return (
+                <Card
                   key={r.id}
-                  className={`p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors hover:bg-muted/20 ${
-                    r.isOverdue ? 'bg-rose-50/40 dark:bg-rose-950/10' : ''
-                  }`}
+                  className={`shadow-sm hover:shadow-md transition-all ${accentClass}`}
                 >
-                  <div className="space-y-1.5 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {r.tipo === 'parcela_pix' ? (
-                        <Badge variant="info" className="gap-1">
-                          <QrCode className="h-3 w-3" />
-                          Parcela PIX
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline">Geral / Retorno</Badge>
+                  <CardContent className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-2 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {r.tipo === 'parcela_pix' ? (
+                          <Badge variant="info" className="gap-1">
+                            <QrCode className="h-3 w-3" />
+                            Parcela PIX
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline">Geral / Retorno</Badge>
+                        )}
+
+                        {getPriorityBadge(r.prioridade)}
+
+                        {r.isOverdue && (
+                          <Badge variant="destructive" className="gap-1">
+                            <AlertTriangle className="h-3 w-3" />
+                            Vencido
+                          </Badge>
+                        )}
+
+                        {r.status === 'pendente' && !r.isOverdue && (
+                          <Badge variant="outline" className="border-amber-300 text-amber-700 dark:text-amber-400">
+                            Pendente
+                          </Badge>
+                        )}
+                        {r.status === 'concluido' && (
+                          <Badge variant="success">Concluído</Badge>
+                        )}
+                        {r.status === 'dispensado' && (
+                          <Badge variant="secondary">Dispensado</Badge>
+                        )}
+                      </div>
+
+                      <h3
+                        className={`font-semibold text-base ${
+                          r.status !== 'pendente'
+                            ? 'line-through text-muted-foreground'
+                            : 'text-foreground'
+                        }`}
+                      >
+                        {r.titulo}
+                      </h3>
+
+                      {r.descricao && (
+                        <p className="text-sm text-muted-foreground bg-muted/30 px-3 py-2 rounded-md border border-border/50">
+                          {r.descricao}
+                        </p>
                       )}
 
-                      {getPriorityBadge(r.prioridade)}
-
-                      {r.isOverdue && (
-                        <Badge variant="destructive" className="gap-1">
-                          <AlertTriangle className="h-3 w-3" />
-                          Vencido
-                        </Badge>
-                      )}
-
-                      {r.status === 'concluido' && (
-                        <Badge variant="success">Concluído</Badge>
-                      )}
-                      {r.status === 'dispensado' && (
-                        <Badge variant="secondary">Dispensado</Badge>
-                      )}
-                    </div>
-
-                    <h3
-                      className={`font-semibold text-base ${
-                        r.status !== 'pendente'
-                          ? 'line-through text-muted-foreground'
-                          : ''
-                      }`}
-                    >
-                      {r.titulo}
-                    </h3>
-
-                    {r.descricao && (
-                      <p className="text-sm text-muted-foreground">{r.descricao}</p>
-                    )}
-
-                    <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground pt-1">
-                      <span className="flex items-center gap-1 font-medium text-foreground">
-                        <Calendar className="h-3.5 w-3.5 text-primary" />
-                        Vencimento: {formatDate(r.dataVencimento)}
-                      </span>
-
-                      {r.client && (
-                        <Link
-                          href={`/clientes/${r.client.id}`}
-                          className="flex items-center gap-1 hover:text-primary hover:underline"
-                        >
-                          <User className="h-3.5 w-3.5" />
-                          {r.client.nome}
-                        </Link>
-                      )}
-
-                      {r.pixInstallment && (
-                        <span className="flex items-center gap-1 font-medium text-emerald-700 dark:text-emerald-400">
-                          Valor Parcela: {formatCurrency(r.pixInstallment.valor)} (Status
-                          Financeiro: {r.pixInstallment.status})
+                      <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground pt-1">
+                        <span className="flex items-center gap-1.5 font-medium text-foreground">
+                          <Calendar className="h-3.5 w-3.5 text-primary" />
+                          Vencimento: {formatDate(r.dataVencimento)}
                         </span>
-                      )}
 
-                      {r.pixInstallment?.payment?.attendanceId && (
-                        <Link
-                          href={`/atendimentos/${r.pixInstallment.payment.attendanceId}`}
-                          className="flex items-center gap-1 text-primary hover:underline font-medium"
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                          Abrir Atendimento
-                        </Link>
-                      )}
+                        {r.client && (
+                          <Link
+                            href={`/clientes/${r.client.id}`}
+                            className="flex items-center gap-1 hover:text-primary hover:underline font-medium"
+                          >
+                            <User className="h-3.5 w-3.5 text-primary" />
+                            {r.client.nome}
+                          </Link>
+                        )}
+
+                        {r.pixInstallment && (
+                          <span className="flex items-center gap-1 font-medium text-emerald-700 dark:text-emerald-400">
+                            Valor Parcela: {formatCurrency(r.pixInstallment.valor)} (Status Financeiro:{' '}
+                            {r.pixInstallment.status})
+                          </span>
+                        )}
+
+                        {r.pixInstallment?.payment?.attendanceId && (
+                          <Link
+                            href={`/atendimentos/${r.pixInstallment.payment.attendanceId}`}
+                            className="flex items-center gap-1 text-primary hover:underline font-medium"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            Abrir Atendimento
+                          </Link>
+                        )}
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Actions */}
-                  <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    {r.status === 'pendente' ? (
-                      <>
+                    {/* Actions */}
+                    <div className="flex flex-wrap items-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0">
+                      {r.status === 'pendente' ? (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 gap-1 text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+                            onClick={() => handleStatusChange(r.id, 'concluido')}
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Concluir
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 gap-1 text-muted-foreground"
+                            onClick={() => handleStatusChange(r.id, 'dispensado')}
+                          >
+                            <XCircle className="h-3.5 w-3.5" />
+                            Dispensar
+                          </Button>
+                        </>
+                      ) : (
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-8 gap-1 text-emerald-700 border-emerald-300 hover:bg-emerald-50"
-                          onClick={() => handleStatusChange(r.id, 'concluido')}
+                          className="h-8 text-xs"
+                          onClick={() => handleStatusChange(r.id, 'pendente')}
                         >
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          Concluir
+                          Reabrir Lembrete
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 gap-1 text-muted-foreground"
-                          onClick={() => handleStatusChange(r.id, 'dispensado')}
-                        >
-                          <XCircle className="h-3.5 w-3.5" />
-                          Dispensar
-                        </Button>
-                      </>
-                    ) : (
+                      )}
+
                       <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 text-xs"
-                        onClick={() => handleStatusChange(r.id, 'pendente')}
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8"
+                        onClick={() => openEditModal(r)}
+                        title="Editar Lembrete"
                       >
-                        Reabrir Lembrete
+                        <Edit3 className="h-4 w-4" />
                       </Button>
-                    )}
 
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8"
-                      onClick={() => openEditModal(r)}
-                      title="Editar Lembrete"
-                    >
-                      <Edit3 className="h-4 w-4" />
-                    </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        onClick={() => handleDelete(r.id)}
+                        title="Excluir Lembrete"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )
+      ) : (
+        <div
+          className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start"
+          data-testid="reminders-kanban-view"
+        >
+          {(
+            [
+              {
+                key: 'pendente' as const,
+                title: 'Pendentes',
+                items: kanbanColumns.pendente,
+                headerBorder: 'border-t-4 border-t-amber-500',
+                badgeClass: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-300',
+                emptyText: 'Nenhum lembrete pendente.',
+              },
+              {
+                key: 'concluido' as const,
+                title: 'Concluídos',
+                items: kanbanColumns.concluido,
+                headerBorder: 'border-t-4 border-t-emerald-500',
+                badgeClass: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-300',
+                emptyText: 'Nenhum lembrete concluído.',
+              },
+              {
+                key: 'dispensado' as const,
+                title: 'Dispensados',
+                items: kanbanColumns.dispensado,
+                headerBorder: 'border-t-4 border-t-slate-400',
+                badgeClass: 'bg-slate-500/15 text-slate-700 dark:text-slate-300 border-slate-300',
+                emptyText: 'Nenhum lembrete dispensado.',
+              },
+            ]
+          ).map((col) => (
+            <div
+              key={col.key}
+              className={`rounded-xl border bg-muted/20 p-3 flex flex-col gap-3 min-h-[420px] ${col.headerBorder}`}
+              data-testid={`kanban-column-${col.key}`}
+            >
+              <div className="flex items-center justify-between px-1 pb-2 border-b">
+                <h2 className="font-semibold text-sm tracking-tight text-foreground">
+                  {col.title}
+                </h2>
+                <Badge variant="outline" className={`text-xs font-semibold ${col.badgeClass}`}>
+                  {col.items.length}
+                </Badge>
+              </div>
 
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8 text-destructive hover:text-destructive"
-                      onClick={() => handleDelete(r.id)}
-                      title="Excluir Lembrete"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+              {col.items.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center py-12 px-4 text-center border border-dashed rounded-lg bg-background/50">
+                  <Bell className="h-7 w-7 text-muted-foreground/30 mb-2" />
+                  <p className="text-xs text-muted-foreground">{col.emptyText}</p>
                 </div>
-              ))}
+              ) : (
+                <div className="space-y-3">
+                  {col.items.map((r) => (
+                    <Card
+                      key={r.id}
+                      className={`shadow-sm hover:shadow-md transition-all ${
+                        r.isOverdue
+                          ? 'border-l-4 border-l-rose-500 bg-rose-50/40 dark:bg-rose-950/10'
+                          : ''
+                      }`}
+                    >
+                      <CardContent className="p-3.5 space-y-2.5">
+                        <div className="flex flex-wrap items-center justify-between gap-1.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {r.tipo === 'parcela_pix' ? (
+                              <Badge variant="info" className="gap-1 text-[10px] px-1.5 py-0">
+                                <QrCode className="h-2.5 w-2.5" />
+                                PIX
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                Geral
+                              </Badge>
+                            )}
+                            {getPriorityBadge(r.prioridade)}
+                            {r.isOverdue && (
+                              <Badge variant="destructive" className="gap-1 text-[10px] px-1.5 py-0">
+                                <AlertTriangle className="h-2.5 w-2.5" />
+                                Vencido
+                              </Badge>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-0.5">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7"
+                              onClick={() => openEditModal(r)}
+                              title="Editar Lembrete"
+                            >
+                              <Edit3 className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-destructive hover:text-destructive"
+                              onClick={() => handleDelete(r.id)}
+                              title="Excluir Lembrete"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        <h3
+                          className={`font-semibold text-sm leading-snug ${
+                            r.status !== 'pendente'
+                              ? 'line-through text-muted-foreground'
+                              : 'text-foreground'
+                          }`}
+                        >
+                          {r.titulo}
+                        </h3>
+
+                        {r.descricao && (
+                          <p className="text-xs text-muted-foreground line-clamp-3 bg-muted/30 p-2 rounded">
+                            {r.descricao}
+                          </p>
+                        )}
+
+                        <div className="space-y-1 pt-1 text-xs text-muted-foreground border-t">
+                          <div className="flex items-center gap-1.5 font-medium text-foreground">
+                            <Calendar className="h-3.5 w-3.5 text-primary shrink-0" />
+                            <span>Vencimento: {formatDate(r.dataVencimento)}</span>
+                          </div>
+
+                          {r.client && (
+                            <Link
+                              href={`/clientes/${r.client.id}`}
+                              className="flex items-center gap-1.5 hover:text-primary hover:underline truncate"
+                            >
+                              <User className="h-3.5 w-3.5 text-primary shrink-0" />
+                              <span className="truncate">{r.client.nome}</span>
+                            </Link>
+                          )}
+
+                          {r.pixInstallment && (
+                            <div className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                              Parcela: {formatCurrency(r.pixInstallment.valor)} ({r.pixInstallment.status})
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t">
+                          {r.status !== 'concluido' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs flex-1 gap-1 text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+                              onClick={() => handleStatusChange(r.id, 'concluido')}
+                            >
+                              <CheckCircle2 className="h-3 w-3" />
+                              Concluir
+                            </Button>
+                          )}
+                          {r.status !== 'dispensado' && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs flex-1 gap-1 text-muted-foreground"
+                              onClick={() => handleStatusChange(r.id, 'dispensado')}
+                            >
+                              <XCircle className="h-3 w-3" />
+                              Dispensar
+                            </Button>
+                          )}
+                          {r.status !== 'pendente' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs flex-1"
+                              onClick={() => handleStatusChange(r.id, 'pendente')}
+                            >
+                              Reabrir
+                            </Button>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </CardContent>
-      </Card>
+          ))}
+        </div>
+      )}
 
       {/* Create / Edit Modal */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -860,6 +1117,7 @@ function LembretesContent() {
           </form>
         </DialogContent>
       </Dialog>
+      {DialogsNode}
     </div>
   );
 }

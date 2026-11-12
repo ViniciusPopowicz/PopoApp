@@ -38,9 +38,13 @@ export async function POST(
     const reversed = await reverseProductUsage(usageId, parsed.data);
     return NextResponse.json({ success: true, data: reversed });
   } catch (error: any) {
-    if (error instanceof DomainError) {
-      return NextResponse.json({ success: false, error: error.message }, { status: error.statusCode });
+    if (error instanceof DomainError || typeof error?.statusCode === 'number') {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: error.statusCode || 400 }
+      );
     }
+    console.error('[POST /api/attendances/[id]/usages/[usageId]/reverse] Erro ao estornar consumo:', error);
     return NextResponse.json(
       { success: false, error: 'Erro interno ao estornar consumo de produto' },
       { status: 500 }
