@@ -1,0 +1,57 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: popoapp-sqlserver
+    restart: "no"
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: "Express"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Execute com --env-file .env.docker e defina MSSQL_SA_PASSWORD}
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    networks:
+      - popoapp_internal
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q \"SELECT 1\" || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q \"SELECT 1\""
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 25s
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: popoapp-web
+    restart: "no"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: "sqlserver://sqlserver:1433;database=PopoApp;user=sa;password=${MSSQL_SA_PASSWORD:?Execute com --env-file .env.docker e defina MSSQL_SA_PASSWORD};encrypt=true;trustServerCertificate=true"
+      SESSION_SECRET: ${SESSION_SECRET:?Execute com --env-file .env.docker e defina SESSION_SECRET (min 32 caracteres)}
+      CRON_SECRET: ${CRON_SECRET:?Execute com --env-file .env.docker e defina CRON_SECRET}
+      STORAGE_DIR: /app/storage/uploads
+      INITIAL_ADMIN_NICKNAME: ${INITIAL_ADMIN_NICKNAME:-admin}
+      INITIAL_ADMIN_DISPLAY_NAME: ${INITIAL_ADMIN_DISPLAY_NAME:-Administrador}
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
+    volumes:
+      - ./docker-data/uploads:/app/storage/uploads
+    networks:
+      - popoapp_internal
+
+volumes:
+  sqlserver_data:
+    name: popoapp_sqlserver_data
+
+networks:
+  popoapp_internal:
+    name: popoapp_internal
+    driver: bridge

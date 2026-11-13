@@ -81,7 +81,7 @@ END;
 
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = N'Product_trackingMode_idx' AND object_id = OBJECT_ID(N'[dbo].[Product]'))
 BEGIN
-    CREATE NONCLUSTERED INDEX [Product_trackingMode_idx] ON [dbo].[Product]([trackingMode]);
+    EXEC('CREATE NONCLUSTERED INDEX [Product_trackingMode_idx] ON [dbo].[Product]([trackingMode]);');
 END;
 
 IF COL_LENGTH('[dbo].[ProductLot]', 'quantidadeInicial') IS NULL
@@ -94,8 +94,11 @@ BEGIN
     ALTER TABLE [dbo].[ProductLot] ADD [quantidadeDisponivel] DECIMAL(10,3) NULL;
 END;
 
-EXEC('UPDATE [dbo].[ProductLot] SET [quantidadeInicial] = [quantidadeOriginal] WHERE [quantidadeInicial] IS NULL');
-EXEC('UPDATE [dbo].[ProductLot] SET [quantidadeDisponivel] = [quantidadeOriginal] WHERE [quantidadeDisponivel] IS NULL');
+IF COL_LENGTH('[dbo].[ProductLot]', 'quantidadeOriginal') IS NOT NULL
+BEGIN
+    EXEC('UPDATE [dbo].[ProductLot] SET [quantidadeInicial] = [quantidadeOriginal] WHERE [quantidadeInicial] IS NULL');
+    EXEC('UPDATE [dbo].[ProductLot] SET [quantidadeDisponivel] = [quantidadeOriginal] WHERE [quantidadeDisponivel] IS NULL');
+END;
 
 IF COL_LENGTH('[dbo].[StockUnit]', 'quantidadeInicial') IS NULL
 BEGIN
@@ -176,22 +179,22 @@ WHERE pu.[productId] IS NULL;
 
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = N'ProductUsage_productId_idx' AND object_id = OBJECT_ID(N'[dbo].[ProductUsage]'))
 BEGIN
-    CREATE NONCLUSTERED INDEX [ProductUsage_productId_idx] ON [dbo].[ProductUsage]([productId]);
+    EXEC('CREATE NONCLUSTERED INDEX [ProductUsage_productId_idx] ON [dbo].[ProductUsage]([productId]);');
 END;
 
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = N'ProductUsage_lotId_idx' AND object_id = OBJECT_ID(N'[dbo].[ProductUsage]'))
 BEGIN
-    CREATE NONCLUSTERED INDEX [ProductUsage_lotId_idx] ON [dbo].[ProductUsage]([lotId]);
+    EXEC('CREATE NONCLUSTERED INDEX [ProductUsage_lotId_idx] ON [dbo].[ProductUsage]([lotId]);');
 END;
 
 IF NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE object_id = OBJECT_ID(N'[dbo].[ProductUsage_productId_fkey]'))
 BEGIN
-    ALTER TABLE [dbo].[ProductUsage] ADD CONSTRAINT [ProductUsage_productId_fkey] FOREIGN KEY ([productId]) REFERENCES [dbo].[Product]([id]) ON DELETE NO ACTION ON UPDATE NO ACTION;
+    EXEC('ALTER TABLE [dbo].[ProductUsage] ADD CONSTRAINT [ProductUsage_productId_fkey] FOREIGN KEY ([productId]) REFERENCES [dbo].[Product]([id]) ON DELETE NO ACTION ON UPDATE NO ACTION;');
 END;
 
 IF NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE object_id = OBJECT_ID(N'[dbo].[ProductUsage_lotId_fkey]'))
 BEGIN
-    ALTER TABLE [dbo].[ProductUsage] ADD CONSTRAINT [ProductUsage_lotId_fkey] FOREIGN KEY ([lotId]) REFERENCES [dbo].[ProductLot]([id]) ON DELETE NO ACTION ON UPDATE NO ACTION;
+    EXEC('ALTER TABLE [dbo].[ProductUsage] ADD CONSTRAINT [ProductUsage_lotId_fkey] FOREIGN KEY ([lotId]) REFERENCES [dbo].[ProductLot]([id]) ON DELETE NO ACTION ON UPDATE NO ACTION;');
 END;
 
 -- CreateTable InventoryMovement

@@ -1,0 +1,30 @@
+# Environment files (strictly excluded from Docker build context)
+.env
+.env.*
+
+# Dependencies & build outputs
+node_modules/
+.next/
+out/
+dist/
+build/
+tsconfig.tsbuildinfo
+
+# Local runtime & Docker bind-mount directories
+storage/
+docker-data/
+
+# Version control, tests, coverage, logs, and docs
+.git/
+.gitignore
+.vscode/
+.idea/
+.agents/
+coverage/
+logs/
+*.log
+npm-debug.log*
+tests/
+Bugs_Improvments/
+Documentation/
+Start_dev/

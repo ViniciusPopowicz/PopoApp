@@ -18,6 +18,7 @@ build/
 .next/
 out/
 storage/
+docker-data/
 
 # Coverage
 coverage/
